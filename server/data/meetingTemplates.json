@@ -1,0 +1,74 @@
+{
+  "templates": [
+    {
+      "id": "neujahr_update",
+      "name": "Neujahres-Update 2026",
+      "description": "Standard-Template für Kampagne",
+      "settings": {
+        "duration": 30,
+        "waitingRoom": true,
+        "autoRecording": "cloud",
+        "muteOnEntry": true,
+        "hostVideo": true,
+        "participantVideo": true
+      },
+      "agenda": "1. Begrüßung (5 Min)\n2. Rückblick 2025 (5 Min)\n3. Ausblick 2026 (10 Min)\n4. Ihre Fragen (10 Min)"
+    },
+    {
+      "id": "support_call",
+      "name": "Support-Call",
+      "description": "Kurzer Support-Termin",
+      "settings": {
+        "duration": 15,
+        "waitingRoom": false,
+        "autoRecording": "none",
+        "muteOnEntry": false,
+        "hostVideo": true,
+        "participantVideo": true
+      },
+      "agenda": "Support-Anfrage bearbeiten"
+    },
+    {
+      "id": "schulung",
+      "name": "Produkt-Schulung",
+      "description": "Ausführliche Schulung",
+      "settings": {
+        "duration": 60,
+        "waitingRoom": true,
+        "autoRecording": "cloud",
+        "muteOnEntry": true,
+        "hostVideo": true,
+        "participantVideo": false
+      },
+      "agenda": "1. Einführung (10 Min)\n2. Feature-Demo (30 Min)\n3. Hands-On (15 Min)\n4. Q&A (5 Min)"
+    },
+    {
+      "id": "erstgespraech",
+      "name": "Erstgespräch Neukunde",
+      "description": "Kennenlernen mit potenziellem Kunden",
+      "settings": {
+        "duration": 45,
+        "waitingRoom": true,
+        "autoRecording": "cloud",
+        "muteOnEntry": false,
+        "hostVideo": true,
+        "participantVideo": true
+      },
+      "agenda": "1. Vorstellung (10 Min)\n2. Bedarfsanalyse (15 Min)\n3. Produkt-Überblick (15 Min)\n4. Nächste Schritte (5 Min)"
+    },
+    {
+      "id": "team_weekly",
+      "name": "Team Weekly",
+      "description": "Wöchentliches Team-Meeting",
+      "settings": {
+        "duration": 30,
+        "waitingRoom": false,
+        "autoRecording": "none",
+        "muteOnEntry": false,
+        "hostVideo": true,
+        "participantVideo": true
+      },
+      "agenda": "1. Status-Updates\n2. Blocker\n3. Planung nächste Woche"
+    }
+  ]
+}

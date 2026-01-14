@@ -1,0 +1,124 @@
+import express from 'express';
+import { zoomApi } from '../services/zoomAuth.js';
+
+const router = express.Router();
+
+// Get all users
+router.get('/', async (req, res) => {
+  try {
+    const { status = 'active', page_size = 300 } = req.query;
+    const users = await zoomApi('GET', `/users?status=${status}&page_size=${page_size}`);
+    res.json(users);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get user details
+router.get('/:userId', async (req, res) => {
+  try {
+    const user = await zoomApi('GET', `/users/${req.params.userId}`);
+    res.json(user);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get user settings
+router.get('/:userId/settings', async (req, res) => {
+  try {
+    const settings = await zoomApi('GET', `/users/${req.params.userId}/settings`);
+    res.json(settings);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Update user settings
+router.patch('/:userId/settings', async (req, res) => {
+  try {
+    await zoomApi('PATCH', `/users/${req.params.userId}/settings`, req.body);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Create a new user
+router.post('/', async (req, res) => {
+  try {
+    const user = await zoomApi('POST', '/users', req.body);
+    res.json(user);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Update user
+router.patch('/:userId', async (req, res) => {
+  try {
+    await zoomApi('PATCH', `/users/${req.params.userId}`, req.body);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Delete user
+router.delete('/:userId', async (req, res) => {
+  try {
+    const { action = 'disassociate' } = req.query;
+    await zoomApi('DELETE', `/users/${req.params.userId}?action=${action}`);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get user's meetings
+router.get('/:userId/meetings', async (req, res) => {
+  try {
+    const { type = 'scheduled' } = req.query;
+    const meetings = await zoomApi('GET', `/users/${req.params.userId}/meetings?type=${type}`);
+    res.json(meetings);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get user's recordings
+router.get('/:userId/recordings', async (req, res) => {
+  try {
+    const { from, to } = req.query;
+    let endpoint = `/users/${req.params.userId}/recordings`;
+    if (from && to) {
+      endpoint += `?from=${from}&to=${to}`;
+    }
+    const recordings = await zoomApi('GET', endpoint);
+    res.json(recordings);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Update user status (activate/deactivate)
+router.put('/:userId/status', async (req, res) => {
+  try {
+    await zoomApi('PUT', `/users/${req.params.userId}/status`, req.body);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get user permissions
+router.get('/:userId/permissions', async (req, res) => {
+  try {
+    const permissions = await zoomApi('GET', `/users/${req.params.userId}/permissions`);
+    res.json(permissions);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+export default router;

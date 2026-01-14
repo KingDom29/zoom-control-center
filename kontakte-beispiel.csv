@@ -1,0 +1,21 @@
+Anrede;Vorname;Nachname;Email;Firma;Telefon;Notizen
+Herr;Max;Mustermann;max.mustermann@example.de;Mustermann Immobilien GmbH;+49 171 1234567;Bestandskunde seit 2022
+Frau;Anna;Schmidt;anna.schmidt@schmidt-makler.de;Schmidt & Partner Makler;+49 172 2345678;Premium Partner
+Herr;Thomas;Weber;t.weber@weber-immo.de;Weber Immobilien;+49 173 3456789;Neukunde Q4/2025
+Frau;Sandra;Müller;sandra.mueller@immoprofi.de;ImmoProfi Bayern GmbH;+49 174 4567890;Großkunde
+Herr;Michael;Bauer;m.bauer@bauer-makler.de;Bauer Maklerservice;+49 175 5678901;Interesse an Enterprise
+Frau;Julia;Fischer;julia@fischer-immobilien.de;Fischer Immobilien;+49 176 6789012;Empfehlung von Hr. Weber
+Herr;Stefan;Hoffmann;s.hoffmann@hoffmann-partner.de;Hoffmann & Partner;+49 177 7890123;Testaccount aktiv
+Frau;Christina;Wagner;c.wagner@wagner-immo.de;Wagner Immobilien GmbH;+49 178 8901234;Enterprise Kunde
+Herr;Andreas;Becker;andreas.becker@immo-becker.de;Immo Becker;+49 179 9012345;Upselling-Potenzial
+Frau;Martina;Richter;m.richter@richter-makler.de;Richter Makler;+49 160 0123456;Bestandskunde
+Herr;Daniel;Klein;daniel.klein@klein-immobilien.de;Klein Immobilien Services;+49 161 1234567;Testzugang läuft aus
+Frau;Sabine;Wolf;s.wolf@wolf-partner.de;Wolf & Partner Makler;+49 162 2345678;Premium Partner
+Herr;Markus;Schneider;markus@schneider-immo.de;Schneider Immobilien;+49 163 3456789;Großes Maklerbüro
+Frau;Nicole;Braun;n.braun@braun-makler.de;Braun Maklerhaus;+49 164 4567890;Interesse an API
+Herr;Peter;Zimmermann;p.zimmermann@zimmer-immo.de;Zimmermann Immobilien;+49 165 5678901;Longtime Customer
+Frau;Claudia;Hartmann;c.hartmann@hartmann-partner.de;Hartmann & Partner;+49 166 6789012;Key Account
+Herr;Jürgen;Krüger;j.krueger@krueger-makler.de;Krüger Maklerbüro;+49 167 7890123;Bestandskunde seit 2021
+Frau;Monika;Lange;m.lange@lange-immobilien.de;Lange Immobilien GmbH;+49 168 8901234;Enterprise Upgrade
+Herr;Klaus;Werner;k.werner@werner-immo.de;Werner Immobilien;+49 169 9012345;Neukunde
+Frau;Petra;Meier;p.meier@meier-makler.de;Meier Makler Service;+49 150 0123456;VIP Partner
