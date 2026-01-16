@@ -97,6 +97,17 @@ router.get('/ready', async (req, res) => {
   }
 });
 
+// Manual health check trigger (runs the full check with email alerts)
+router.post('/check', async (req, res) => {
+  try {
+    const { runHealthCheck } = await import('../jobs/campaignScheduler.js');
+    const result = await runHealthCheck();
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Helper function
 function formatUptime(seconds) {
   const days = Math.floor(seconds / 86400);

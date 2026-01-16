@@ -18,6 +18,78 @@ const __dirname = path.dirname(__filename);
 const CAMPAIGN_DB_PATH = path.join(__dirname, '../data/campaign.json');
 const DATA_DIR = path.join(__dirname, '../data');
 
+// Persistent token storage path
+const TOKENS_DB_PATH = path.join(__dirname, '../data/click-tokens.json');
+
+// Load tokens from disk
+function loadClickTokens() {
+  try {
+    if (fs.existsSync(TOKENS_DB_PATH)) {
+      const data = JSON.parse(fs.readFileSync(TOKENS_DB_PATH, 'utf-8'));
+      // Filter out expired tokens (older than 30 days)
+      const now = Date.now();
+      const validTokens = {};
+      for (const [token, info] of Object.entries(data)) {
+        const age = now - new Date(info.createdAt).getTime();
+        if (age < 30 * 24 * 60 * 60 * 1000) {
+          validTokens[token] = info;
+        }
+      }
+      return validTokens;
+    }
+  } catch (e) {
+    logger.warn('Could not load click tokens', { error: e.message });
+  }
+  return {};
+}
+
+// Save tokens to disk
+function saveClickTokens(tokens) {
+  try {
+    fs.writeFileSync(TOKENS_DB_PATH, JSON.stringify(tokens, null, 2));
+  } catch (e) {
+    logger.error('Could not save click tokens', { error: e.message });
+  }
+}
+
+// Click tracking token storage (persistent)
+let clickTokensData = loadClickTokens();
+
+// Wrapper for Map-like interface but persistent
+const clickTokens = {
+  get(token) {
+    return clickTokensData[token];
+  },
+  set(token, data) {
+    clickTokensData[token] = data;
+    saveClickTokens(clickTokensData);
+  },
+  delete(token) {
+    delete clickTokensData[token];
+    saveClickTokens(clickTokensData);
+  },
+  has(token) {
+    return token in clickTokensData;
+  }
+};
+
+// Generate tracking token for a contact
+function generateClickToken(contactId, action) {
+  const token = crypto.randomBytes(16).toString('hex');
+  clickTokens.set(token, { contactId, action, createdAt: new Date().toISOString() });
+  return token;
+}
+
+// Get tracking URL for email buttons
+function getTrackingUrl(contactId, action) {
+  const token = generateClickToken(contactId, action);
+  const baseUrl = process.env.PUBLIC_URL || process.env.PUBLIC_BASE_URL || 'http://localhost:3001';
+  return `${baseUrl}/api/campaign/track/${action}/${token}`;
+}
+
+// Export for use in routes
+export { clickTokens, getTrackingUrl };
+
 // Campaign Configuration
 const CAMPAIGN_CONFIG = {
   name: 'Maklerplan Neujahres-Update 2026',
@@ -521,6 +593,9 @@ class CampaignService {
         const icsContent = this.generateICS(contact);
         const icsBase64 = Buffer.from(icsContent, 'utf-8').toString('base64');
         
+        // Generate tracking URLs
+        const cancelUrl = getTrackingUrl(contact.id, 'cancel');
+        
         // Send to customer + team (CC)
         await emailService.sendEmail({
           to: contact.email,
@@ -531,7 +606,8 @@ class CampaignService {
             firma: contact.firma,
             datum: dateStr,
             uhrzeit: timeStr,
-            zoomLink: this.getJoinLink(contact)
+            zoomLink: this.getJoinLink(contact),
+            cancel_url: cancelUrl
           }),
           attachments: [{
             name: `Termin-${dateStr.replace(/[,\s]+/g, '-')}.ics`,
@@ -603,6 +679,9 @@ class CampaignService {
         const icsContent = this.generateICS(contact);
         const icsBase64 = Buffer.from(icsContent, 'utf-8').toString('base64');
         
+        // Generate tracking URLs
+        const cancelUrl = getTrackingUrl(contact.id, 'cancel');
+        
         // Send to customer + team (CC)
         await emailService.sendEmail({
           to: contact.email,
@@ -612,7 +691,8 @@ class CampaignService {
             anrede: `${anrede} ${name}`,
             datum: dateStr,
             uhrzeit: timeStr,
-            zoomLink: this.getJoinLink(contact)
+            zoomLink: this.getJoinLink(contact),
+            cancel_url: cancelUrl
           }),
           attachments: [{
             name: `Erinnerung-Termin-${dateStr.replace(/[,\s]+/g, '-')}.ics`,
@@ -960,12 +1040,18 @@ class CampaignService {
                    'Guten Tag';
     const name = contact.nachname || contact.firma || '';
 
+    // Generate tracking URLs
+    const quickCallUrl = getTrackingUrl(contact.id, 'quick-call');
+    const noInterestUrl = getTrackingUrl(contact.id, 'no-interest');
+
     await emailService.sendTemplateEmail({
       to: contact.email,
       templateId: 'noshow_followup',
       variables: {
         anrede: `${anrede} ${name}`,
-        firma: contact.firma
+        firma: contact.firma,
+        quick_call_url: quickCallUrl,
+        no_interest_url: noInterestUrl
       }
     });
 

@@ -5,31 +5,12 @@
 
 import express from 'express';
 import path from 'path';
-import crypto from 'crypto';
-import { campaignService } from '../services/campaignService.js';
+import { campaignService, clickTokens, getTrackingUrl } from '../services/campaignService.js';
 import emailService, { getResponseTimeText, EMAIL_TEMPLATES } from '../services/emailService.js';
+import { zendeskService } from '../services/zendeskService.js';
 import logger from '../utils/logger.js';
 
 const router = express.Router();
-
-// Token storage for click tracking
-const clickTokens = new Map();
-
-// Generate tracking token for a contact
-function generateClickToken(contactId, action) {
-  const token = crypto.randomBytes(16).toString('hex');
-  clickTokens.set(token, { contactId, action, createdAt: new Date() });
-  // Auto-expire after 7 days (max safe timeout)
-  setTimeout(() => clickTokens.delete(token), 7 * 24 * 60 * 60 * 1000);
-  return token;
-}
-
-// Get tracking URL
-function getTrackingUrl(contactId, action) {
-  const token = generateClickToken(contactId, action);
-  const baseUrl = process.env.PUBLIC_URL || 'http://localhost:3001';
-  return `${baseUrl}/api/campaign/track/${action}/${token}`;
-}
 
 // ============================================
 // IMPORT ENDPOINTS
@@ -933,6 +914,41 @@ router.get('/track/:action/:token', async (req, res) => {
   
   logger.info(`🚨 CLICK: ${action} von ${contact.firma} (${contact.email})`);
   
+  // Zendesk Ticket erstellen
+  const meetingInfo = contact.scheduledSlot ? {
+    date: new Date(contact.scheduledSlot.startTime).toLocaleDateString('de-DE', { timeZone: 'Europe/Berlin' }),
+    time: new Date(contact.scheduledSlot.startTime).toLocaleTimeString('de-DE', { timeZone: 'Europe/Berlin', hour: '2-digit', minute: '2-digit' })
+  } : null;
+
+  try {
+    const ticket = await zendeskService.createCampaignClickTicket(contact, action, meetingInfo);
+    if (ticket) {
+      logger.info(`🎫 Zendesk Ticket #${ticket.id} erstellt für ${contact.email}`);
+    }
+  } catch (zendeskError) {
+    logger.error('Zendesk Ticket Fehler', { error: zendeskError.message });
+    // Fallback: E-Mail senden
+    try {
+      const actionLabels = {
+        'quick-call': '🚀 SCHNELL-TERMIN ANGEFORDERT',
+        'urgent': '📞 DRINGENDER RÜCKRUF',
+        'book': '📅 Buchung angefordert',
+        'no-interest': '❌ Kein Interesse',
+        'cancel': '🚫 TERMIN ABGESAGT'
+      };
+      const contactName = `${contact.vorname} ${contact.nachname}`.trim() || contact.firma;
+      const isUrgent = action === 'quick-call' || action === 'urgent' || action === 'cancel';
+      await emailService.sendEmail({
+        to: 'support@maklerplan.com',
+        subject: `${isUrgent ? '🚨 URGENT: ' : ''}${actionLabels[action] || action} - ${contactName}`,
+        body: `<p>Aktion: ${action}</p><p>E-Mail: ${contact.email}</p><p>Firma: ${contact.firma}</p><p>Telefon: ${contact.telefon || '-'}</p>`
+      });
+      logger.info(`📧 Fallback E-Mail gesendet für ${contact.email}`);
+    } catch (emailError) {
+      logger.error('Fallback E-Mail auch fehlgeschlagen', { error: emailError.message });
+    }
+  }
+  
   // Invalidate token (one-time use)
   clickTokens.delete(token);
   
@@ -954,6 +970,10 @@ router.get('/track/:action/:token', async (req, res) => {
     'no-interest': {
       title: '✅ Verstanden',
       body: 'Sie werden keine weiteren Nachrichten erhalten.'
+    },
+    'cancel': {
+      title: '🚫 Termin abgesagt',
+      body: 'Wir haben Ihre Absage erhalten. Wenn Sie einen neuen Termin möchten, besuchen Sie booking.maklerplan.com'
     }
   };
   

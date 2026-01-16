@@ -1,0 +1,160 @@
+{
+  "sequences": [
+    {
+      "id": "5f7008db-333c-405e-af6c-ea9ffcad1d89",
+      "leadId": "615776f1-f9e9-466b-a79e-6013d1c41134",
+      "email": "test@example.com",
+      "firma": "Test Immobilien GmbH",
+      "city": "",
+      "rating": 4.8,
+      "reviewCount": 42,
+      "status": "converted",
+      "currentStep": 1,
+      "steps": [
+        {
+          "template": "initial",
+          "scheduledAt": "2026-01-16T23:08:57.454Z",
+          "sentAt": "2026-01-16T23:08:57.880Z"
+        },
+        {
+          "template": "followup1",
+          "scheduledAt": "2026-01-19T23:08:57.454Z",
+          "sentAt": null
+        },
+        {
+          "template": "followup2",
+          "scheduledAt": "2026-01-23T23:08:57.454Z",
+          "sentAt": null
+        }
+      ],
+      "createdAt": "2026-01-16T23:08:57.454Z",
+      "updatedAt": "2026-01-16T23:08:57.880Z"
+    },
+    {
+      "id": "887e1b4c-dc9e-454b-a9ab-ac9c43701a9b",
+      "leadId": "6f0ea675-2d52-49d9-8b1d-b663d31d7dd1",
+      "email": "zendesk-test@example.com",
+      "firma": "Zendesk Test Makler",
+      "city": "",
+      "rating": 4.9,
+      "reviewCount": 88,
+      "status": "converted",
+      "currentStep": 1,
+      "steps": [
+        {
+          "template": "initial",
+          "scheduledAt": "2026-01-16T23:13:55.814Z",
+          "sentAt": "2026-01-16T23:13:56.344Z"
+        },
+        {
+          "template": "followup1",
+          "scheduledAt": "2026-01-19T23:13:55.814Z",
+          "sentAt": null
+        },
+        {
+          "template": "followup2",
+          "scheduledAt": "2026-01-23T23:13:55.814Z",
+          "sentAt": null
+        }
+      ],
+      "createdAt": "2026-01-16T23:13:55.814Z",
+      "updatedAt": "2026-01-16T23:13:56.344Z"
+    },
+    {
+      "id": "615f0372-1a86-4cb9-bcf2-ae53364a24db",
+      "leadId": "28c858a0-026c-40f9-ac4d-477ff38734d2",
+      "email": "final-test@example.com",
+      "firma": "Final Zendesk Test",
+      "city": "",
+      "rating": 4.7,
+      "reviewCount": 55,
+      "status": "converted",
+      "currentStep": 1,
+      "steps": [
+        {
+          "template": "initial",
+          "scheduledAt": "2026-01-16T23:14:49.864Z",
+          "sentAt": "2026-01-16T23:14:50.479Z"
+        },
+        {
+          "template": "followup1",
+          "scheduledAt": "2026-01-19T23:14:49.864Z",
+          "sentAt": null
+        },
+        {
+          "template": "followup2",
+          "scheduledAt": "2026-01-23T23:14:49.864Z",
+          "sentAt": null
+        }
+      ],
+      "createdAt": "2026-01-16T23:14:49.864Z",
+      "updatedAt": "2026-01-16T23:14:50.479Z"
+    },
+    {
+      "id": "551fa520-605b-4080-883b-c1b52933e996",
+      "leadId": "24956537-45ca-4f47-a002-79db0132e333",
+      "email": "impressum-test@example.com",
+      "firma": "Impressum Test Makler",
+      "city": "",
+      "rating": 4.6,
+      "reviewCount": 33,
+      "status": "active",
+      "currentStep": 1,
+      "totalSteps": 7,
+      "steps": [
+        {
+          "template": "step1_intro",
+          "day": 0,
+          "scheduledAt": "2026-01-16T23:34:10.784Z",
+          "sentAt": "2026-01-16T23:34:11.132Z"
+        },
+        {
+          "template": "step2_value",
+          "day": 3,
+          "scheduledAt": "2026-01-19T23:34:10.784Z",
+          "sentAt": null
+        },
+        {
+          "template": "step3_social_proof",
+          "day": 7,
+          "scheduledAt": "2026-01-23T23:34:10.784Z",
+          "sentAt": null
+        },
+        {
+          "template": "step4_scarcity",
+          "day": 11,
+          "scheduledAt": "2026-01-27T23:34:10.784Z",
+          "sentAt": null
+        },
+        {
+          "template": "step5_case_study",
+          "day": 16,
+          "scheduledAt": "2026-02-01T23:34:10.784Z",
+          "sentAt": null
+        },
+        {
+          "template": "step6_last_chance",
+          "day": 21,
+          "scheduledAt": "2026-02-06T23:34:10.784Z",
+          "sentAt": null
+        },
+        {
+          "template": "step7_breakup",
+          "day": 28,
+          "scheduledAt": "2026-02-13T23:34:10.784Z",
+          "sentAt": null
+        }
+      ],
+      "clickedActions": [],
+      "createdAt": "2026-01-16T23:34:10.784Z",
+      "updatedAt": "2026-01-16T23:34:11.132Z"
+    }
+  ],
+  "optedOut": [],
+  "stats": {
+    "sent": 4,
+    "opened": 0,
+    "clicked": 4,
+    "converted": 3
+  }
+}

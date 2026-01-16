@@ -1,0 +1,37 @@
+{
+  "b0e9c5a6ad0dd720bc2a2bd406babfe9": {
+    "contactId": "c3615798-4dae-4b38-a49a-ededcb604827",
+    "action": "urgent",
+    "createdAt": "2026-01-16T22:22:14.120Z"
+  },
+  "13d4853fc83f619e5a691e1de23abc0b": {
+    "contactId": "c3615798-4dae-4b38-a49a-ededcb604827",
+    "action": "book",
+    "createdAt": "2026-01-16T22:22:14.121Z"
+  },
+  "ba6a5616931520b473e53c7e16027d9b": {
+    "contactId": "c3615798-4dae-4b38-a49a-ededcb604827",
+    "action": "no-interest",
+    "createdAt": "2026-01-16T22:22:14.121Z"
+  },
+  "d99dfea8c7371cdc358cd63832fc49d1": {
+    "contactId": "c2795ec9-8cc5-463f-baf6-23aa0d68c19e",
+    "action": "quick-call",
+    "createdAt": "2026-01-16T23:30:00.040Z"
+  },
+  "241842541efbc0d1d7e8cd76b8210052": {
+    "contactId": "c2795ec9-8cc5-463f-baf6-23aa0d68c19e",
+    "action": "no-interest",
+    "createdAt": "2026-01-16T23:30:00.041Z"
+  },
+  "cb59bfb5aa319acd4d36a7cac51dacba": {
+    "contactId": "c3615798-4dae-4b38-a49a-ededcb604827",
+    "action": "quick-call",
+    "createdAt": "2026-01-16T23:30:00.623Z"
+  },
+  "3e4bd7eeecbef4601fb62c53705d3294": {
+    "contactId": "c3615798-4dae-4b38-a49a-ededcb604827",
+    "action": "no-interest",
+    "createdAt": "2026-01-16T23:30:00.623Z"
+  }
+}

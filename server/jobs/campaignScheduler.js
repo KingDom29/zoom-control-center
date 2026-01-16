@@ -222,6 +222,180 @@ const dailyReportJob = cron.schedule('0 18 * * *', async () => {
 logger.info('📊 Daily Report geplant: Täglich um 18:00 Uhr');
 
 // =============================================
+// DAILY HEALTH CHECK - Täglich um 09:00 Uhr
+// =============================================
+
+async function runHealthCheck() {
+  logger.info('🏥 Health-Check gestartet...');
+  
+  const issues = [];
+  const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'support@maklerplan.com';
+  
+  try {
+    // 1. Server-Status prüfen
+    const healthRes = await fetch('http://localhost:3001/api/health');
+    const health = await healthRes.json();
+    
+    if (health.status !== 'healthy') {
+      issues.push(`⚠️ Server-Status: ${health.status}`);
+    }
+    
+    // 2. Campaign-Daten prüfen
+    const { campaignService } = await import('../services/campaignService.js');
+    const stats = campaignService.getStats();
+    
+    if (!stats || stats.totalContacts === 0) {
+      issues.push('❌ Keine Kampagnen-Daten geladen');
+    }
+    
+    // 3. Zoom API prüfen (nur Token-Abruf, nicht API-Call - Scopes sind begrenzt)
+    try {
+      const { getAccessToken } = await import('../services/zoomAuth.js');
+      const token = await getAccessToken();
+      if (!token || token.length < 100) {
+        issues.push('❌ Zoom Token ungültig');
+      }
+    } catch (zoomError) {
+      issues.push(`❌ Zoom Auth Fehler: ${zoomError.message}`);
+    }
+    
+    // 4. E-Mail Service prüfen
+    try {
+      const { emailService } = await import('../services/emailService.js');
+      if (!emailService.isInitialized) {
+        await emailService.initialize();
+      }
+    } catch (emailError) {
+      issues.push(`❌ E-Mail Service Fehler: ${emailError.message}`);
+    }
+    
+    // 5. Speicherplatz prüfen
+    const memUsage = process.memoryUsage();
+    const heapUsedMB = Math.round(memUsage.heapUsed / 1024 / 1024);
+    if (heapUsedMB > 500) {
+      issues.push(`⚠️ Hoher Speicherverbrauch: ${heapUsedMB} MB`);
+    }
+    
+    // 6. Pending Jobs prüfen
+    const pendingNoShows = campaignService.campaign?.pendingNoShowEmails?.filter(p => !p.sent) || [];
+    if (pendingNoShows.length > 10) {
+      issues.push(`⚠️ ${pendingNoShows.length} ausstehende No-Show E-Mails`);
+    }
+    
+    // Bei Problemen E-Mail senden
+    if (issues.length > 0) {
+      logger.warn('🏥 Health-Check: Probleme gefunden', { issues });
+      
+      const { emailService } = await import('../services/emailService.js');
+      await emailService.sendEmail({
+        to: ADMIN_EMAIL,
+        subject: `🚨 Zoom Control Center - Health-Check Alert`,
+        body: `
+<div style="font-family: Arial, sans-serif; max-width: 600px;">
+  <h2 style="color: #dc2626;">🏥 Health-Check Alert</h2>
+  <p>Der tägliche Health-Check hat folgende Probleme gefunden:</p>
+  
+  <div style="background: #fef2f2; padding: 15px; border-radius: 8px; margin: 20px 0;">
+    ${issues.map(i => `<p style="margin: 5px 0;">• ${i}</p>`).join('')}
+  </div>
+  
+  <table style="width: 100%; border-collapse: collapse; margin: 20px 0; font-size: 14px;">
+    <tr>
+      <td style="padding: 8px; border-bottom: 1px solid #eee;"><strong>Server:</strong></td>
+      <td style="padding: 8px; border-bottom: 1px solid #eee;">${process.env.PUBLIC_URL || 'localhost:3001'}</td>
+    </tr>
+    <tr>
+      <td style="padding: 8px; border-bottom: 1px solid #eee;"><strong>Uptime:</strong></td>
+      <td style="padding: 8px; border-bottom: 1px solid #eee;">${Math.floor(process.uptime() / 3600)}h ${Math.floor((process.uptime() % 3600) / 60)}m</td>
+    </tr>
+    <tr>
+      <td style="padding: 8px; border-bottom: 1px solid #eee;"><strong>Memory:</strong></td>
+      <td style="padding: 8px; border-bottom: 1px solid #eee;">${heapUsedMB} MB</td>
+    </tr>
+    <tr>
+      <td style="padding: 8px; border-bottom: 1px solid #eee;"><strong>Zeitpunkt:</strong></td>
+      <td style="padding: 8px; border-bottom: 1px solid #eee;">${new Date().toLocaleString('de-DE', { timeZone: 'Europe/Berlin' })}</td>
+    </tr>
+  </table>
+  
+  <p style="color: #666; font-size: 12px;">
+    Diese E-Mail wurde automatisch vom Zoom Control Center Health-Check gesendet.
+  </p>
+</div>
+        `.trim()
+      });
+      
+      logger.info(`📧 Health-Check Alert gesendet an ${ADMIN_EMAIL}`);
+    } else {
+      logger.info('✅ Health-Check: Alles OK');
+    }
+    
+    return { ok: issues.length === 0, issues };
+    
+  } catch (error) {
+    logger.error('❌ Health-Check Fehler', { error: error.message });
+    
+    // Bei kritischem Fehler trotzdem versuchen E-Mail zu senden
+    try {
+      const { emailService } = await import('../services/emailService.js');
+      await emailService.sendEmail({
+        to: ADMIN_EMAIL,
+        subject: `🚨 KRITISCH: Zoom Control Center Health-Check fehlgeschlagen`,
+        body: `<p>Der Health-Check konnte nicht durchgeführt werden:</p><p><strong>${error.message}</strong></p>`
+      });
+    } catch (e) {
+      logger.error('Konnte Alert-E-Mail nicht senden', { error: e.message });
+    }
+    
+    return { ok: false, error: error.message };
+  }
+}
+
+const healthCheckJob = cron.schedule('0 9 * * *', async () => {
+  await runHealthCheck();
+}, {
+  timezone: 'Europe/Berlin',
+  scheduled: true
+});
+
+logger.info('🏥 Health-Check geplant: Täglich um 09:00 Uhr');
+
+// =============================================
+// LEAD OUTREACH - Jede Stunde (5 E-Mails/Stunde)
+// =============================================
+
+async function runLeadOutreach() {
+  if (process.env.LEAD_OUTREACH_ENABLED !== 'true') return;
+  
+  try {
+    const { leadOutreachService } = await import('../services/leadOutreachService.js');
+    
+    // 1. Follow-up E-Mails für bestehende Sequenzen
+    const processed = await leadOutreachService.processSequences();
+    if (processed > 0) {
+      logger.info(`📬 Lead-Outreach: ${processed} Follow-up E-Mails gesendet`);
+    }
+    
+    // 2. Neue Leads aus Queue anschreiben (max 5/Stunde)
+    const result = await leadOutreachService.runLeadGeneration();
+    if (result.sent > 0) {
+      logger.info(`📬 Lead-Outreach: ${result.sent} neue E-Mails, Queue: ${result.remaining}`);
+    }
+    
+  } catch (error) {
+    logger.error('Lead-Outreach Fehler', { error: error.message });
+  }
+}
+
+// Stündlich zur vollen Stunde (9-18 Uhr Werktags)
+const leadOutreachJob = cron.schedule('0 9-18 * * 1-5', runLeadOutreach, {
+  timezone: 'Europe/Berlin',
+  scheduled: true
+});
+
+logger.info('📬 Lead-Outreach geplant: Stündlich 9-18 Uhr Mo-Fr (LEAD_OUTREACH_ENABLED=true)');
+
+// =============================================
 // STARTUP CATCH-UP - Verpasste Tasks nachholen
 // =============================================
 
@@ -291,5 +465,7 @@ export {
   runReengagementProcessor, reengagementJob,
   runReplySync, replySyncJob,
   dailyReportJob,
+  runHealthCheck, healthCheckJob,
+  runLeadOutreach, leadOutreachJob,
   runStartupCatchup
 };

@@ -441,10 +441,15 @@ export const EMAIL_TEMPLATES = {
           </div>
           
           <div style="background: #fff8e6; padding: 15px; border-radius: 8px; margin: 25px 0; border-left: 4px solid #f5a623;">
-            <p style="margin: 0;"><strong>Passt der Termin nicht?</strong></p>
-            <p style="margin: 10px 0 0;">Kein Problem! Buchen Sie sich einfach einen anderen unter:<br>
-            👉 <a href="https://booking.maklerplan.com" style="color: #667eea; font-weight: bold;">booking.maklerplan.com</a></p>
-            <p style="margin: 10px 0 0;">Oder antworten Sie kurz – wir stornieren den Termin gerne für Sie.</p>
+            <p style="margin: 0 0 10px;"><strong>Passt der Termin nicht?</strong></p>
+            <div style="text-align: center;">
+              <a href="https://booking.maklerplan.com" style="display: inline-block; background: #667eea; color: white; padding: 10px 20px; text-decoration: none; border-radius: 6px; margin: 5px; font-size: 14px;">
+                📅 Anderen Termin wählen
+              </a>
+              <a href="{{cancel_url}}" style="display: inline-block; background: #95a5a6; color: white; padding: 10px 20px; text-decoration: none; border-radius: 6px; margin: 5px; font-size: 14px;">
+                ❌ Termin absagen
+              </a>
+            </div>
           </div>
           
           <p>Wir freuen uns, wenn es klappt!</p>
@@ -496,14 +501,21 @@ export const EMAIL_TEMPLATES = {
           
           <div style="text-align: center; margin: 25px 0;">
             <a href="{{zoomLink}}" style="display: inline-block; background: #2D8CFF; color: white; padding: 14px 32px; text-decoration: none; border-radius: 6px; font-weight: 500; font-size: 15px;">
-              Termin bestätigen →
+              ✅ Termin bestätigen →
             </a>
           </div>
           
-          <p style="color: #666; font-size: 14px;">
-            Kommt etwas dazwischen? Kein Problem – buchen Sie einen neuen Termin unter
-            <a href="https://booking.maklerplan.com" style="color: #2D8CFF;">booking.maklerplan.com</a>
-          </p>
+          <div style="background: #fff8e6; padding: 15px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #f5a623;">
+            <p style="margin: 0 0 10px;"><strong>Kommt etwas dazwischen?</strong></p>
+            <div style="text-align: center;">
+              <a href="https://booking.maklerplan.com" style="display: inline-block; background: #667eea; color: white; padding: 10px 20px; text-decoration: none; border-radius: 6px; margin: 5px; font-size: 14px;">
+                📅 Termin verschieben
+              </a>
+              <a href="{{cancel_url}}" style="display: inline-block; background: #95a5a6; color: white; padding: 10px 20px; text-decoration: none; border-radius: 6px; margin: 5px; font-size: 14px;">
+                ❌ Termin absagen
+              </a>
+            </div>
+          </div>
           
           <p style="margin-top: 25px;">
             Herzliche Grüße<br>
@@ -545,15 +557,27 @@ export const EMAIL_TEMPLATES = {
           
           <p>wir hatten uns auf das Gespräch mit Ihnen gefreut – leider konnten wir Sie nicht erreichen.</p>
           
-          <p><strong>Kein Problem!</strong> Buchen Sie einfach einen neuen Termin:</p>
+          <p><strong>Was würde Ihnen am besten passen?</strong></p>
           
-          <div style="text-align: center; margin: 25px 0;">
-            <a href="https://booking.maklerplan.com" style="display: inline-block; background: #667eea; color: white; padding: 14px 32px; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 15px;">
-              👉 Neuen Termin buchen
+          <div style="margin: 25px 0; text-align: center;">
+            <a href="{{quick_call_url}}" style="display: inline-block; background: #e74c3c; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; margin: 5px; font-weight: 600;">
+              🚀 Schnell-Termin (diese Woche)
+            </a>
+            <a href="https://booking.maklerplan.com" style="display: inline-block; background: #667eea; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; margin: 5px; font-weight: 600;">
+              📅 Selbst Termin wählen
             </a>
           </div>
           
-          <p style="color: #666;">Oder antworten Sie einfach auf diese E-Mail – wir finden einen passenden Zeitpunkt.</p>
+          <div style="margin: 20px 0; text-align: center;">
+            <a href="mailto:support@maklerplan.com?subject=Frage von {{firma}}" style="display: inline-block; background: #3498db; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; margin: 5px;">
+              📧 Frage per E-Mail
+            </a>
+            <a href="{{no_interest_url}}" style="display: inline-block; background: #95a5a6; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; margin: 5px;">
+              ❌ Kein Bedarf
+            </a>
+          </div>
+          
+          <p style="color: #666; font-size: 14px;">Oder antworten Sie einfach auf diese E-Mail – wir finden einen passenden Zeitpunkt.</p>
           
           <p style="margin-top: 30px;">
             Herzliche Grüße<br>

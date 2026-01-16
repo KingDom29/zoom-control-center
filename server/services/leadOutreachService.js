@@ -1,0 +1,1021 @@
+/**
+ * Lead Outreach Service
+ * Automatische E-Mail-Sequenz für Makler-Leads
+ */
+
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import crypto from 'crypto';
+import logger from '../utils/logger.js';
+import { emailService } from './emailService.js';
+import { leadDatabase, LeadStatus, LeadPriority } from './leadDatabase.js';
+import { googlePlacesService } from './googlePlacesService.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const OUTREACH_DB_PATH = path.join(__dirname, '../data/lead-outreach.json');
+const TOKENS_PATH = path.join(__dirname, '../data/lead-tokens.json');
+const QUEUE_PATH = path.join(__dirname, '../data/lead-queue.json');
+
+// Konfiguration
+const EMAILS_PER_HOUR = 5;  // Max 5 E-Mails pro Stunde
+const DISTRICTS_PER_RUN = 1; // 1 Landkreis pro Durchlauf
+
+// Token-Verwaltung (persistent)
+let leadTokens = {};
+
+function loadTokens() {
+  try {
+    if (fs.existsSync(TOKENS_PATH)) {
+      leadTokens = JSON.parse(fs.readFileSync(TOKENS_PATH, 'utf-8'));
+      logger.info(`📂 ${Object.keys(leadTokens).length} Lead-Tokens geladen`);
+    }
+  } catch (e) {
+    leadTokens = {};
+  }
+}
+
+function saveTokens() {
+  fs.writeFileSync(TOKENS_PATH, JSON.stringify(leadTokens, null, 2));
+}
+
+function generateLeadToken(leadId, action) {
+  const token = crypto.randomBytes(16).toString('hex');
+  leadTokens[token] = {
+    leadId,
+    action,
+    createdAt: new Date().toISOString()
+  };
+  saveTokens();
+  
+  // Auto-expire nach 30 Tagen
+  setTimeout(() => {
+    delete leadTokens[token];
+    saveTokens();
+  }, 7 * 24 * 60 * 60 * 1000); // 7 Tage (safe für setTimeout)
+  
+  return token;
+}
+
+function getLeadTrackingUrl(leadId, action) {
+  const token = generateLeadToken(leadId, action);
+  const baseUrl = process.env.PUBLIC_URL || 'http://localhost:3001';
+  return `${baseUrl}/api/leads/track/${action}/${token}`;
+}
+
+// Tokens beim Start laden
+loadTokens();
+
+// Rechtlich korrektes Impressum für alle E-Mails
+const EMAIL_FOOTER = `
+<div style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #eee; font-size: 11px; color: #666; line-height: 1.6;">
+  <table style="width: 100%;">
+    <tr>
+      <td style="vertical-align: top; padding-right: 15px;">
+        <p style="margin: 0 0 3px;"><strong>Maklerplan Pro GmbH</strong></p>
+        <p style="margin: 0; font-size: 10px;">Französische Str. 20, 10117 Berlin<br>
+        +49 30 219 25007 · HRB 264573 B, AG Berlin</p>
+      </td>
+      <td style="vertical-align: top;">
+        <p style="margin: 0 0 3px;"><strong>Maklerplan GmbH</strong></p>
+        <p style="margin: 0; font-size: 10px;">Grafenauweg 8, 6300 Zug, Schweiz<br>
+        +41 41 510 61 00 · CHE-138.210.925</p>
+      </td>
+    </tr>
+  </table>
+  <p style="margin: 12px 0 0; font-size: 10px;">
+    Geschäftsführer: Dominik Eisenhardt · 
+    <a href="https://www.maklerplan.com" style="color: #667eea;">www.maklerplan.com</a> · 
+    <a href="mailto:support@maklerplan.com" style="color: #667eea;">support@maklerplan.com</a>
+  </p>
+  <p style="margin: 10px 0 0; font-size: 10px;">
+    <a href="{{optout_url}}" style="color: #999;">Abmelden</a> · 
+    <a href="https://maklerplan.com/datenschutz" style="color: #999;">Datenschutz</a> · 
+    <a href="https://maklerplan.com/impressum" style="color: #999;">Impressum</a>
+  </p>
+</div>
+`.trim();
+
+// Sequenz-Konfiguration: 7 E-Mails über 4 Wochen
+const SEQUENCE_CONFIG = {
+  steps: [
+    { day: 0, template: 'step1_intro' },
+    { day: 3, template: 'step2_value' },
+    { day: 7, template: 'step3_social_proof' },
+    { day: 11, template: 'step4_scarcity' },
+    { day: 16, template: 'step5_case_study' },
+    { day: 21, template: 'step6_last_chance' },
+    { day: 28, template: 'step7_breakup' }
+  ],
+  totalEmails: 7,
+  durationDays: 28
+};
+
+// E-Mail Templates für Lead-Outreach (7 Stufen)
+const LEAD_TEMPLATES = {
+  // STUFE 1: Intro (Tag 0)
+  step1_intro: {
+    subject: '🏠 Mehr Leads für {{firma}} – kostenlose Analyse',
+    body: `
+<div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #333;">
+  <p>{{anrede}},</p>
+  
+  <p>ich bin auf <strong>{{firma}}</strong> aufmerksam geworden und beeindruckt von Ihren <strong>{{rating}} Sternen</strong> bei {{reviewCount}} Bewertungen – das spricht für echte Qualität!</p>
+  
+  <p>Wir bei <strong>Maklerplan</strong> helfen Immobilienmaklern wie Ihnen, <strong>mehr qualifizierte Eigentümer-Leads</strong> zu gewinnen – ohne Kaltakquise, ohne teure Portale.</p>
+  
+  <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin: 25px 0;">
+    <p style="margin: 0 0 15px; font-weight: 600;">Das bieten wir:</p>
+    <ul style="margin: 0; padding-left: 20px;">
+      <li>✅ Exklusive Eigentümer-Leads in Ihrer Region</li>
+      <li>✅ Keine Konkurrenz – nur Sie erhalten den Lead</li>
+      <li>✅ Kostenlose Erstanalyse Ihres Einzugsgebiets</li>
+    </ul>
+  </div>
+  
+  <p><strong>Interesse an einem kurzen Austausch?</strong></p>
+  
+  <div style="text-align: center; margin: 30px 0;">
+    <a href="{{call_url}}" style="display: inline-block; background: #22c55e; color: white; padding: 14px 28px; text-decoration: none; border-radius: 6px; font-weight: 600; margin: 5px;">
+      ✅ Ja, rufen Sie mich an
+    </a>
+    <a href="https://booking.maklerplan.com" style="display: inline-block; background: #667eea; color: white; padding: 14px 28px; text-decoration: none; border-radius: 6px; font-weight: 600; margin: 5px;">
+      📅 Selbst Termin buchen
+    </a>
+  </div>
+  
+  <div style="text-align: center; margin: 15px 0;">
+    <a href="{{info_url}}" style="display: inline-block; background: #6b7280; color: white; padding: 10px 20px; text-decoration: none; border-radius: 6px; font-size: 14px; margin: 5px;">
+      📄 Mehr Infos zusenden
+    </a>
+  </div>
+  
+  <p style="color: #666; font-size: 14px; text-align: center;">
+    <a href="{{optout_url}}" style="color: #999;">Nicht interessiert? Hier abmelden</a>
+  </p>
+</div>
+    `.trim()
+  },
+
+  // STUFE 2: Value Proposition (Tag 3)
+  step2_value: {
+    subject: 'RE: {{firma}} – So funktioniert unser Lead-System',
+    body: `
+<div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #333;">
+  <p>{{anrede}},</p>
+  
+  <p>kurze Frage: Wie viel Zeit verbringen Sie aktuell mit der Akquise neuer Objekte?</p>
+  
+  <p>Unsere Partner-Makler berichten, dass sie durch Maklerplan <strong>durchschnittlich 8-12 Stunden pro Woche</strong> einsparen – Zeit, die sie für Besichtigungen und Abschlüsse nutzen.</p>
+  
+  <div style="background: #ecfdf5; padding: 20px; border-radius: 8px; margin: 25px 0; border-left: 4px solid #22c55e;">
+    <p style="margin: 0 0 10px; font-weight: 600;">📊 So funktioniert's:</p>
+    <ol style="margin: 0; padding-left: 20px;">
+      <li>Wir identifizieren verkaufswillige Eigentümer in {{city}}</li>
+      <li>Sie erhalten den Lead <strong>exklusiv</strong> – kein Wettbewerb</li>
+      <li>Sie kontaktieren nur vorqualifizierte Interessenten</li>
+    </ol>
+  </div>
+  
+  <p>Klingt das interessant für Sie?</p>
+  
+  <div style="text-align: center; margin: 30px 0;">
+    <a href="{{call_url}}" style="display: inline-block; background: #22c55e; color: white; padding: 14px 28px; text-decoration: none; border-radius: 6px; font-weight: 600; margin: 5px;">
+      📞 Rückruf anfordern
+    </a>
+    <a href="https://booking.maklerplan.com" style="display: inline-block; background: #667eea; color: white; padding: 14px 28px; text-decoration: none; border-radius: 6px; font-weight: 600; margin: 5px;">
+      📅 Selbst Termin buchen
+    </a>
+  </div>
+  
+  <p style="margin: 20px 0 0;">Beste Grüße,<br><strong>Maklerplan-Team</strong></p>
+</div>
+    `.trim()
+  },
+
+  // STUFE 3: Social Proof (Tag 7)
+  step3_social_proof: {
+    subject: '{{firma}}: Was andere Makler über uns sagen',
+    body: `
+<div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #333;">
+  <p>{{anrede}},</p>
+  
+  <p>ich wollte Ihnen zeigen, was andere Makler über die Zusammenarbeit mit uns sagen:</p>
+  
+  <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin: 25px 0;">
+    <p style="font-style: italic; margin: 0 0 10px;">"Seit wir mit Maklerplan arbeiten, haben wir 40% mehr Objekte im Portfolio. Die Leads sind hochwertig und exklusiv."</p>
+    <p style="margin: 0; font-weight: 600; color: #666;">– Thomas M., Immobilienmakler aus München</p>
+  </div>
+  
+  <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin: 25px 0;">
+    <p style="font-style: italic; margin: 0 0 10px;">"Endlich keine Kaltakquise mehr! Die Eigentümer kommen zu mir."</p>
+    <p style="margin: 0; font-weight: 600; color: #666;">– Sandra K., Maklerin aus Hamburg</p>
+  </div>
+  
+  <p>Möchten Sie ähnliche Ergebnisse für {{firma}}?</p>
+  
+  <div style="text-align: center; margin: 30px 0;">
+    <a href="{{call_url}}" style="display: inline-block; background: #22c55e; color: white; padding: 14px 28px; text-decoration: none; border-radius: 6px; font-weight: 600; margin: 5px;">
+      ✅ Ja, mehr erfahren
+    </a>
+    <a href="{{info_url}}" style="display: inline-block; background: #6b7280; color: white; padding: 14px 28px; text-decoration: none; border-radius: 6px; font-weight: 600; margin: 5px;">
+      📄 Case Study zusenden
+    </a>
+  </div>
+  
+  <p style="margin: 20px 0 0;">Beste Grüße,<br><strong>Maklerplan-Team</strong></p>
+  <p style="color: #999; font-size: 12px;"><a href="{{optout_url}}" style="color: #999;">Abmelden</a></p>
+</div>
+    `.trim()
+  },
+
+  // STUFE 4: Scarcity (Tag 11)
+  step4_scarcity: {
+    subject: '⚡ {{city}}: Nur noch 2 Partner-Plätze frei',
+    body: `
+<div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #333;">
+  <p>{{anrede}},</p>
+  
+  <p>kurzes Update: In <strong>{{city}}</strong> haben wir aktuell nur noch <strong>2 freie Plätze</strong> für neue Partner-Makler.</p>
+  
+  <p>Warum die Begrenzung? Wir garantieren jedem Partner exklusive Leads – ohne Konkurrenz. Deshalb können wir nur eine begrenzte Anzahl Makler pro Region aufnehmen.</p>
+  
+  <div style="background: #fef3c7; padding: 20px; border-radius: 8px; margin: 25px 0; border-left: 4px solid #f59e0b;">
+    <p style="margin: 0; font-weight: 600;">🔒 Ihre Vorteile als Partner:</p>
+    <ul style="margin: 10px 0 0; padding-left: 20px;">
+      <li>Exklusivgebiet – keine anderen Makler erhalten Ihre Leads</li>
+      <li>Mindestens 5-10 qualifizierte Leads pro Monat</li>
+      <li>Keine Mindestlaufzeit</li>
+    </ul>
+  </div>
+  
+  <p>Da Sie mit {{rating}} Sternen zu den Top-Maklern in {{city}} gehören, möchte ich Ihnen die Chance nicht vorenthalten.</p>
+  
+  <div style="text-align: center; margin: 30px 0;">
+    <a href="{{call_url}}" style="display: inline-block; background: #f59e0b; color: white; padding: 14px 28px; text-decoration: none; border-radius: 6px; font-weight: 600;">
+      ⚡ Platz sichern
+    </a>
+  </div>
+  
+  <p style="margin: 20px 0 0;">Beste Grüße,<br><strong>Maklerplan-Team</strong></p>
+  <p style="color: #999; font-size: 12px;"><a href="{{optout_url}}" style="color: #999;">Abmelden</a></p>
+</div>
+    `.trim()
+  },
+
+  // STUFE 5: Case Study (Tag 16)
+  step5_case_study: {
+    subject: 'Fallstudie: Wie ein Makler 12 Objekte in 3 Monaten gewann',
+    body: `
+<div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #333;">
+  <p>{{anrede}},</p>
+  
+  <p>ich möchte Ihnen eine kurze Erfolgsgeschichte zeigen:</p>
+  
+  <div style="background: #f0fdf4; padding: 20px; border-radius: 8px; margin: 25px 0;">
+    <p style="font-weight: 600; margin: 0 0 15px; color: #166534;">📈 Fallstudie: Immobilien Schmidt, Düsseldorf</p>
+    <table style="width: 100%;">
+      <tr><td style="padding: 5px 0;"><strong>Vorher:</strong></td><td>2-3 neue Objekte/Monat durch Kaltakquise</td></tr>
+      <tr><td style="padding: 5px 0;"><strong>Nachher:</strong></td><td>8-10 neue Objekte/Monat durch Maklerplan</td></tr>
+      <tr><td style="padding: 5px 0;"><strong>Ergebnis:</strong></td><td>+180% Umsatz in 6 Monaten</td></tr>
+    </table>
+  </div>
+  
+  <p>Das Beste: Herr Schmidt hat <strong>keine einzige Stunde mehr</strong> mit Kaltakquise verbracht.</p>
+  
+  <p>Möchten Sie erfahren, wie das auch für {{firma}} funktionieren kann?</p>
+  
+  <div style="text-align: center; margin: 30px 0;">
+    <a href="{{call_url}}" style="display: inline-block; background: #22c55e; color: white; padding: 14px 28px; text-decoration: none; border-radius: 6px; font-weight: 600;">
+      📊 Meine Potenzialanalyse anfordern
+    </a>
+  </div>
+  
+  <p style="margin: 20px 0 0;">Beste Grüße,<br><strong>Maklerplan-Team</strong></p>
+  <p style="color: #999; font-size: 12px;"><a href="{{optout_url}}" style="color: #999;">Abmelden</a></p>
+</div>
+    `.trim()
+  },
+
+  // STUFE 6: Last Chance (Tag 21)
+  step6_last_chance: {
+    subject: '{{anrede_kurz}}, passt Maklerplan zu {{firma}}?',
+    body: `
+<div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #333;">
+  <p>{{anrede}},</p>
+  
+  <p>ich habe Ihnen in den letzten Wochen einige Informationen geschickt. Vielleicht passt Maklerplan aktuell nicht zu Ihren Plänen – das ist völlig okay.</p>
+  
+  <p>Aber bevor ich aufhöre, Ihnen zu schreiben, eine ehrliche Frage:</p>
+  
+  <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin: 25px 0;">
+    <p style="margin: 0; font-weight: 600;">Was hält Sie davon ab, mehr über unser Angebot zu erfahren?</p>
+  </div>
+  
+  <div style="margin: 25px 0;">
+    <p style="margin: 10px 0;"><a href="{{call_url}}" style="color: #22c55e; text-decoration: none;">👉 Ich habe einfach keine Zeit – später gerne</a></p>
+    <p style="margin: 10px 0;"><a href="{{info_url}}" style="color: #3b82f6; text-decoration: none;">👉 Ich brauche mehr Infos vor einem Gespräch</a></p>
+    <p style="margin: 10px 0;"><a href="{{optout_url}}" style="color: #999; text-decoration: none;">👉 Kein Interesse – bitte nicht mehr kontaktieren</a></p>
+  </div>
+  
+  <p>Ein Klick genügt, dann weiß ich Bescheid.</p>
+  
+  <p style="margin: 20px 0 0;">Beste Grüße,<br><strong>Maklerplan-Team</strong></p>
+</div>
+    `.trim()
+  },
+
+  // STUFE 7: Breakup (Tag 28)
+  step7_breakup: {
+    subject: 'Auf Wiedersehen, {{anrede_kurz}}',
+    body: `
+<div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #333;">
+  <p>{{anrede}},</p>
+  
+  <p>dies ist meine letzte E-Mail an Sie.</p>
+  
+  <p>Ich verstehe, dass Maklerplan vielleicht nicht das Richtige für {{firma}} ist – oder dass der Zeitpunkt nicht passt. Das respektiere ich.</p>
+  
+  <p>Falls Sie in Zukunft doch mehr qualifizierte Eigentümer-Leads für {{city}} gewinnen möchten, wissen Sie ja, wo Sie uns finden:</p>
+  
+  <div style="text-align: center; margin: 30px 0;">
+    <a href="{{call_url}}" style="display: inline-block; background: #6b7280; color: white; padding: 14px 28px; text-decoration: none; border-radius: 6px; font-weight: 600;">
+      📞 Doch noch Kontakt aufnehmen
+    </a>
+  </div>
+  
+  <p>Ansonsten wünsche ich Ihnen weiterhin viel Erfolg mit {{firma}}!</p>
+  
+  <p style="margin: 20px 0 0;">Alles Gute,<br><strong>Maklerplan-Team</strong></p>
+  
+  <p style="color: #999; font-size: 12px; margin-top: 30px;">
+    Sie werden keine weiteren E-Mails von uns erhalten.
+  </p>
+</div>
+    `.trim()
+  },
+
+  // INFO-SEQUENZ: Wenn jemand "Mehr Infos" klickt
+  info_followup: {
+    subject: '📄 Ihre angeforderten Infos zu Maklerplan',
+    body: `
+<div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #333;">
+  <p>{{anrede}},</p>
+  
+  <p>vielen Dank für Ihr Interesse! Hier sind die wichtigsten Infos zu Maklerplan:</p>
+  
+  <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin: 25px 0;">
+    <p style="font-weight: 600; margin: 0 0 15px;">🏠 Was ist Maklerplan?</p>
+    <p style="margin: 0;">Wir generieren exklusive Eigentümer-Leads für Immobilienmakler. Sie erhalten vorqualifizierte Kontakte von Menschen, die ihre Immobilie verkaufen möchten – ohne Konkurrenz mit anderen Maklern.</p>
+  </div>
+  
+  <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin: 25px 0;">
+    <p style="font-weight: 600; margin: 0 0 15px;">💰 Was kostet das?</p>
+    <p style="margin: 0;">Wir arbeiten auf Erfolgsbasis. Sie zahlen nur für Leads, die zu einem Abschluss führen. Kein Risiko für Sie.</p>
+  </div>
+  
+  <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin: 25px 0;">
+    <p style="font-weight: 600; margin: 0 0 15px;">📍 Wie funktioniert die Exklusivität?</p>
+    <p style="margin: 0;">Pro Region arbeiten wir nur mit einer begrenzten Anzahl Makler. So garantieren wir, dass Sie keine Konkurrenz haben.</p>
+  </div>
+  
+  <p><strong>Nächster Schritt:</strong> In einem kurzen 15-Minuten-Gespräch zeige ich Ihnen, wie viele potenzielle Verkäufer es in Ihrem Gebiet gibt.</p>
+  
+  <div style="text-align: center; margin: 30px 0;">
+    <a href="{{call_url}}" style="display: inline-block; background: #22c55e; color: white; padding: 14px 28px; text-decoration: none; border-radius: 6px; font-weight: 600;">
+      📞 Kostenloses Gespräch buchen
+    </a>
+  </div>
+  
+  <p style="margin: 20px 0 0;">Beste Grüße,<br><strong>Maklerplan-Team</strong></p>
+  <p style="color: #999; font-size: 12px;"><a href="{{optout_url}}" style="color: #999;">Abmelden</a></p>
+</div>
+    `.trim()
+  }
+};
+
+class LeadOutreachService {
+  constructor() {
+    this.outreachData = this.loadOutreachData();
+    this.queue = this.loadQueue();
+  }
+
+  loadOutreachData() {
+    try {
+      if (fs.existsSync(OUTREACH_DB_PATH)) {
+        return JSON.parse(fs.readFileSync(OUTREACH_DB_PATH, 'utf-8'));
+      }
+    } catch (e) {
+      logger.error('Error loading outreach data', { error: e.message });
+    }
+    return { 
+      sequences: [], 
+      optedOut: [],
+      stats: { sent: 0, opened: 0, clicked: 0, converted: 0 }
+    };
+  }
+
+  loadQueue() {
+    try {
+      if (fs.existsSync(QUEUE_PATH)) {
+        return JSON.parse(fs.readFileSync(QUEUE_PATH, 'utf-8'));
+      }
+    } catch (e) {
+      logger.error('Error loading queue', { error: e.message });
+    }
+    return {
+      currentDistrictIndex: 0,
+      pendingLeads: [],
+      lastProcessedAt: null,
+      emailsSentThisHour: 0,
+      hourStartedAt: null,
+      totalDistrictsProcessed: 0,
+      totalLeadsFound: 0,
+      totalEmailsSent: 0
+    };
+  }
+
+  saveQueue() {
+    fs.writeFileSync(QUEUE_PATH, JSON.stringify(this.queue, null, 2));
+  }
+
+  saveOutreachData() {
+    fs.writeFileSync(OUTREACH_DB_PATH, JSON.stringify(this.outreachData, null, 2));
+  }
+
+  /**
+   * Startet Outreach für einen Lead (7 E-Mails über 4 Wochen)
+   */
+  async startSequence(lead) {
+    // Prüfe ob bereits in Sequenz oder opted-out
+    if (this.outreachData.optedOut.includes(lead.email)) {
+      logger.info(`⏭️ ${lead.email} ist opted-out, überspringe`);
+      return null;
+    }
+
+    const existingSequence = this.outreachData.sequences.find(
+      s => s.leadId === lead.id || s.email === lead.email
+    );
+    if (existingSequence) {
+      logger.info(`⏭️ ${lead.email} bereits in Sequenz`);
+      return existingSequence;
+    }
+
+    // 7-Schritte-Sequenz basierend auf SEQUENCE_CONFIG erstellen
+    const now = new Date();
+    const steps = SEQUENCE_CONFIG.steps.map(step => ({
+      template: step.template,
+      day: step.day,
+      scheduledAt: this.addDays(now, step.day).toISOString(),
+      sentAt: null
+    }));
+
+    // Neue Sequenz erstellen
+    const sequence = {
+      id: crypto.randomUUID(),
+      leadId: lead.id,
+      email: lead.email,
+      firma: lead.company || lead.name,
+      city: lead.city || '',
+      rating: lead.rating,
+      reviewCount: lead.reviewCount,
+      status: 'active', // active, paused, completed, converted, opted_out
+      currentStep: 0,
+      totalSteps: SEQUENCE_CONFIG.totalEmails,
+      steps,
+      clickedActions: [], // Tracking welche Buttons geklickt wurden
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+
+    this.outreachData.sequences.push(sequence);
+    this.saveOutreachData();
+
+    // Erste E-Mail sofort senden
+    await this.sendSequenceEmail(sequence, 0);
+
+    return sequence;
+  }
+
+  /**
+   * Stoppt eine Sequenz (bei Opt-out oder Conversion)
+   */
+  stopSequence(sequenceId, reason = 'manual') {
+    const sequence = this.outreachData.sequences.find(s => s.id === sequenceId);
+    if (!sequence) return null;
+
+    sequence.status = reason === 'optout' ? 'opted_out' : 
+                      reason === 'converted' ? 'converted' : 'completed';
+    sequence.stoppedAt = new Date().toISOString();
+    sequence.stoppedReason = reason;
+    sequence.updatedAt = new Date().toISOString();
+    this.saveOutreachData();
+
+    logger.info(`⏹️ Sequenz gestoppt für ${sequence.email}: ${reason}`);
+    return sequence;
+  }
+
+  /**
+   * Wechselt Sequenz zu Info-Followup (wenn "Mehr Infos" geklickt)
+   */
+  async switchToInfoSequence(sequenceId) {
+    const sequence = this.outreachData.sequences.find(s => s.id === sequenceId);
+    if (!sequence || sequence.status !== 'active') return null;
+
+    // Info-Mail sofort senden
+    sequence.clickedActions.push({ action: 'info', at: new Date().toISOString() });
+    sequence.updatedAt = new Date().toISOString();
+    this.saveOutreachData();
+
+    // Info-Template senden
+    const template = LEAD_TEMPLATES.info_followup;
+    const callUrl = getLeadTrackingUrl(sequence.leadId, 'call');
+    const optoutUrl = getLeadTrackingUrl(sequence.leadId, 'optout');
+
+    const variables = {
+      anrede: 'Guten Tag',
+      firma: sequence.firma,
+      city: sequence.city,
+      call_url: callUrl,
+      optout_url: optoutUrl
+    };
+
+    try {
+      const fullBody = this.replaceVariables(template.body, variables) + 
+                       this.replaceVariables(EMAIL_FOOTER, variables);
+
+      await emailService.sendEmail({
+        to: sequence.email,
+        replyTo: 'support@maklerplan.com',
+        subject: this.replaceVariables(template.subject, variables),
+        body: fullBody
+      });
+      logger.info(`📄 Info-Mail gesendet: ${sequence.email}`);
+    } catch (e) {
+      logger.error('Info-Mail Fehler', { error: e.message });
+    }
+
+    return sequence;
+  }
+
+  /**
+   * Sendet E-Mail für einen Sequenz-Schritt
+   */
+  async sendSequenceEmail(sequence, stepIndex) {
+    const step = sequence.steps[stepIndex];
+    if (!step || step.sentAt) return;
+
+    const template = LEAD_TEMPLATES[step.template];
+    if (!template) return;
+
+    // Tracking URLs generieren
+    const callUrl = getLeadTrackingUrl(sequence.leadId, 'call');
+    const infoUrl = getLeadTrackingUrl(sequence.leadId, 'info');
+    const optoutUrl = getLeadTrackingUrl(sequence.leadId, 'optout');
+
+    // Anrede bestimmen
+    const anrede = 'Guten Tag';
+    const anrede_kurz = 'Guten Tag'; // Kurze Form für Betreff
+
+    // Template-Variablen
+    const variables = {
+      anrede,
+      anrede_kurz,
+      firma: sequence.firma,
+      rating: sequence.rating?.toFixed(1) || '4.5',
+      reviewCount: sequence.reviewCount || '50+',
+      city: sequence.city || 'Ihrer Region',
+      call_url: callUrl,
+      info_url: infoUrl,
+      optout_url: optoutUrl
+    };
+
+    try {
+      // Body + rechtlich korrektes Impressum
+      const fullBody = this.replaceVariables(template.body, variables) + 
+                       this.replaceVariables(EMAIL_FOOTER, variables);
+
+      await emailService.sendEmail({
+        to: sequence.email,
+        replyTo: 'support@maklerplan.com',
+        subject: this.replaceVariables(template.subject, variables),
+        body: fullBody
+      });
+
+      // Update sequence
+      sequence.steps[stepIndex].sentAt = new Date().toISOString();
+      sequence.currentStep = stepIndex + 1;
+      sequence.updatedAt = new Date().toISOString();
+      
+      this.outreachData.stats.sent++;
+      this.saveOutreachData();
+
+      logger.info(`📧 Lead-E-Mail gesendet: ${sequence.email} (Step ${stepIndex + 1})`);
+
+      // Lead-Status updaten
+      leadDatabase.updateLead(sequence.leadId, {
+        status: LeadStatus.CONTACTED,
+        lastContactedAt: new Date().toISOString()
+      });
+
+    } catch (error) {
+      logger.error(`Lead-E-Mail Fehler für ${sequence.email}`, { error: error.message });
+    }
+  }
+
+  /**
+   * Verarbeitet alle fälligen Sequenz-Schritte
+   */
+  async processSequences() {
+    const now = new Date();
+    let processed = 0;
+
+    for (const sequence of this.outreachData.sequences) {
+      if (sequence.status !== 'active') continue;
+
+      for (let i = 0; i < sequence.steps.length; i++) {
+        const step = sequence.steps[i];
+        if (step.sentAt) continue;
+
+        const scheduledAt = new Date(step.scheduledAt);
+        if (scheduledAt <= now) {
+          await this.sendSequenceEmail(sequence, i);
+          processed++;
+          await this.sleep(2000); // Rate limiting
+          break; // Nur einen Schritt pro Durchlauf
+        }
+      }
+
+      // Sequenz abgeschlossen?
+      if (sequence.steps.every(s => s.sentAt)) {
+        sequence.status = 'completed';
+        this.saveOutreachData();
+      }
+    }
+
+    if (processed > 0) {
+      logger.info(`📬 ${processed} Lead-E-Mails verarbeitet`);
+    }
+
+    return processed;
+  }
+
+  /**
+   * Verarbeitet Click-Tracking
+   */
+  handleClick(token) {
+    const tokenData = leadTokens[token];
+    if (!tokenData) return null;
+
+    const { leadId, action } = tokenData;
+    const lead = leadDatabase.getLeadById(leadId);
+    
+    if (!lead) return null;
+
+    // Sequenz finden und updaten
+    const sequence = this.outreachData.sequences.find(s => s.leadId === leadId);
+
+    this.outreachData.stats.clicked++;
+
+    // Aktion in Sequenz tracken
+    if (sequence && sequence.clickedActions) {
+      sequence.clickedActions.push({ action, at: new Date().toISOString() });
+    }
+
+    switch (action) {
+      case 'call':
+        // Hot Lead! → Sequenz STOPPEN
+        leadDatabase.updateLead(leadId, {
+          priority: LeadPriority.HOT,
+          status: LeadStatus.MEETING_SCHEDULED
+        });
+        if (sequence) {
+          sequence.status = 'converted';
+          sequence.stoppedAt = new Date().toISOString();
+          sequence.stoppedReason = 'call_clicked';
+          logger.info(`🔥 HOT LEAD: ${lead.email} - Sequenz gestoppt`);
+        }
+        this.outreachData.stats.converted++;
+        break;
+
+      case 'info':
+        // Interesse geweckt → Info-Mail senden, Sequenz PAUSIEREN
+        leadDatabase.updateLead(leadId, {
+          priority: LeadPriority.HIGH
+        });
+        if (sequence) {
+          sequence.status = 'paused';
+          sequence.pausedReason = 'info_requested';
+          // Info-Mail wird separat gesendet (async)
+          this.switchToInfoSequence(sequence.id);
+          logger.info(`📄 INFO REQUESTED: ${lead.email} - Sequenz pausiert`);
+        }
+        break;
+
+      case 'optout':
+        // Kein Interesse → Sequenz STOPPEN
+        this.outreachData.optedOut.push(lead.email);
+        if (sequence) {
+          sequence.status = 'opted_out';
+          sequence.stoppedAt = new Date().toISOString();
+          sequence.stoppedReason = 'optout_clicked';
+          logger.info(`❌ OPT-OUT: ${lead.email} - Sequenz gestoppt`);
+        }
+        leadDatabase.updateLead(leadId, {
+          status: LeadStatus.LOST,
+          tags: [...(lead.tags || []), 'opted-out']
+        });
+        break;
+    }
+
+    if (sequence) {
+      sequence.updatedAt = new Date().toISOString();
+    }
+    this.saveOutreachData();
+    
+    // Token invalidieren
+    delete leadTokens[token];
+    saveTokens();
+
+    return { lead, action };
+  }
+
+  /**
+   * Prüft und resettet das Stunden-Limit
+   */
+  checkHourlyLimit() {
+    const now = new Date();
+    const hourStart = this.queue.hourStartedAt ? new Date(this.queue.hourStartedAt) : null;
+    
+    // Neue Stunde?
+    if (!hourStart || (now - hourStart) >= 60 * 60 * 1000) {
+      this.queue.emailsSentThisHour = 0;
+      this.queue.hourStartedAt = now.toISOString();
+      this.saveQueue();
+    }
+    
+    return this.queue.emailsSentThisHour < EMAILS_PER_HOUR;
+  }
+
+  /**
+   * Fügt Leads zur Queue hinzu
+   */
+  addToQueue(leads) {
+    for (const lead of leads) {
+      // Duplikat-Check
+      const exists = this.queue.pendingLeads.some(l => l.email === lead.email);
+      const alreadySent = this.outreachData.sequences.some(s => s.email === lead.email);
+      const optedOut = this.outreachData.optedOut.includes(lead.email);
+      
+      if (!exists && !alreadySent && !optedOut && lead.email) {
+        this.queue.pendingLeads.push({
+          ...lead,
+          addedAt: new Date().toISOString()
+        });
+      }
+    }
+    this.saveQueue();
+    return this.queue.pendingLeads.length;
+  }
+
+  /**
+   * Verarbeitet nächsten Landkreis und fügt Leads zur Queue
+   */
+  async processNextDistrict() {
+    const districts = googlePlacesService.getAllDistricts();
+    
+    if (this.queue.currentDistrictIndex >= districts.length) {
+      logger.info('✅ Alle 400 Landkreise wurden verarbeitet!');
+      return { done: true, districtIndex: this.queue.currentDistrictIndex };
+    }
+
+    const district = districts[this.queue.currentDistrictIndex];
+    logger.info(`🔍 Verarbeite Landkreis ${this.queue.currentDistrictIndex + 1}/${districts.length}: ${district.name}`);
+
+    try {
+      const leads = await googlePlacesService.searchAllGermanDistricts({
+        startIndex: this.queue.currentDistrictIndex,
+        maxDistricts: DISTRICTS_PER_RUN,
+        maxPerDistrict: 10,
+        minRating: 4.2,
+        onlyWithEmail: true
+      });
+
+      // In Lead-DB importieren
+      const { imported } = leadDatabase.bulkImportFromPlaces(
+        leads.map(l => ({
+          place_id: l.place_id,
+          name: l.name,
+          formatted_address: l.address,
+          formatted_phone_number: l.phone,
+          website: l.website,
+          email: l.email,
+          rating: l.rating,
+          user_ratings_total: l.reviewCount,
+          district: l.district,
+          state: l.state
+        }))
+      );
+
+      // Zur Queue hinzufügen
+      this.addToQueue(imported);
+      
+      this.queue.currentDistrictIndex++;
+      this.queue.totalDistrictsProcessed++;
+      this.queue.totalLeadsFound += imported.length;
+      this.saveQueue();
+
+      logger.info(`📍 ${district.name}: ${imported.length} Leads zur Queue hinzugefügt`);
+      
+      return {
+        done: false,
+        district: district.name,
+        leadsFound: imported.length,
+        queueSize: this.queue.pendingLeads.length,
+        districtIndex: this.queue.currentDistrictIndex
+      };
+
+    } catch (error) {
+      logger.error(`Fehler bei Landkreis ${district.name}`, { error: error.message });
+      // Trotzdem weiter zum nächsten
+      this.queue.currentDistrictIndex++;
+      this.saveQueue();
+      return { done: false, error: error.message };
+    }
+  }
+
+  /**
+   * Sendet E-Mails aus der Queue (max 5 pro Stunde)
+   */
+  async processQueue() {
+    if (!this.checkHourlyLimit()) {
+      logger.info(`⏳ Stunden-Limit erreicht (${EMAILS_PER_HOUR}/h). Warte auf nächste Stunde.`);
+      return { sent: 0, remaining: this.queue.pendingLeads.length, limitReached: true };
+    }
+
+    const toSend = Math.min(
+      EMAILS_PER_HOUR - this.queue.emailsSentThisHour,
+      this.queue.pendingLeads.length
+    );
+
+    if (toSend === 0) {
+      return { sent: 0, remaining: this.queue.pendingLeads.length };
+    }
+
+    let sent = 0;
+    for (let i = 0; i < toSend; i++) {
+      const lead = this.queue.pendingLeads.shift();
+      if (!lead) break;
+
+      try {
+        // Lead in DB anlegen falls nicht vorhanden
+        let dbLead = leadDatabase.getLeadByPlaceId(lead.place_id);
+        if (!dbLead) {
+          dbLead = leadDatabase.createLead({
+            placeId: lead.place_id,
+            name: lead.name,
+            company: lead.name,
+            address: lead.address,
+            phone: lead.phone,
+            email: lead.email,
+            website: lead.website,
+            rating: lead.rating,
+            reviewCount: lead.reviewCount,
+            city: lead.district,
+            source: 'google_places'
+          });
+        }
+
+        // Outreach starten
+        await this.startSequence({
+          ...dbLead,
+          city: lead.district,
+          rating: lead.rating,
+          reviewCount: lead.reviewCount
+        });
+
+        sent++;
+        this.queue.emailsSentThisHour++;
+        this.queue.totalEmailsSent++;
+        
+        await this.sleep(5000); // 5 Sekunden zwischen E-Mails
+
+      } catch (error) {
+        logger.error(`Fehler beim Senden an ${lead.email}`, { error: error.message });
+      }
+    }
+
+    this.queue.lastProcessedAt = new Date().toISOString();
+    this.saveQueue();
+
+    logger.info(`📬 ${sent} E-Mails gesendet. Queue: ${this.queue.pendingLeads.length} verbleibend`);
+    
+    return { 
+      sent, 
+      remaining: this.queue.pendingLeads.length,
+      totalSent: this.queue.totalEmailsSent
+    };
+  }
+
+  /**
+   * Hauptfunktion: Verarbeitet Landkreise und sendet E-Mails
+   */
+  async runLeadGeneration(options = {}) {
+    logger.info('🚀 Lead-Generierung gestartet...');
+
+    try {
+      // 1. Wenn Queue leer, nächsten Landkreis laden
+      if (this.queue.pendingLeads.length < 10) {
+        await this.processNextDistrict();
+      }
+
+      // 2. E-Mails aus Queue senden (max 5/Stunde)
+      const result = await this.processQueue();
+
+      logger.info(`✅ Lead-Generierung Durchlauf abgeschlossen`);
+
+      return {
+        ...result,
+        currentDistrict: this.queue.currentDistrictIndex,
+        totalDistricts: googlePlacesService.getAllDistricts().length,
+        queueSize: this.queue.pendingLeads.length,
+        stats: this.queue
+      };
+
+    } catch (error) {
+      logger.error('Lead-Generierung Fehler', { error: error.message });
+      throw error;
+    }
+  }
+
+  /**
+   * Queue-Status abrufen
+   */
+  getQueueStatus() {
+    return {
+      currentDistrictIndex: this.queue.currentDistrictIndex,
+      totalDistricts: googlePlacesService.getAllDistricts().length,
+      pendingLeads: this.queue.pendingLeads.length,
+      emailsSentThisHour: this.queue.emailsSentThisHour,
+      totalDistrictsProcessed: this.queue.totalDistrictsProcessed,
+      totalLeadsFound: this.queue.totalLeadsFound,
+      totalEmailsSent: this.queue.totalEmailsSent,
+      lastProcessedAt: this.queue.lastProcessedAt
+    };
+  }
+
+  /**
+   * Queue zurücksetzen
+   */
+  resetQueue() {
+    this.queue = {
+      currentDistrictIndex: 0,
+      pendingLeads: [],
+      lastProcessedAt: null,
+      emailsSentThisHour: 0,
+      hourStartedAt: null,
+      totalDistrictsProcessed: 0,
+      totalLeadsFound: 0,
+      totalEmailsSent: 0
+    };
+    this.saveQueue();
+    return this.queue;
+  }
+
+  /**
+   * Statistiken
+   */
+  getStats() {
+    return {
+      ...this.outreachData.stats,
+      activeSequences: this.outreachData.sequences.filter(s => s.status === 'active').length,
+      completedSequences: this.outreachData.sequences.filter(s => s.status === 'completed').length,
+      optedOut: this.outreachData.optedOut.length
+    };
+  }
+
+  replaceVariables(text, variables) {
+    let result = text;
+    for (const [key, value] of Object.entries(variables)) {
+      result = result.replace(new RegExp(`{{${key}}}`, 'g'), value || '');
+    }
+    return result;
+  }
+
+  addDays(date, days) {
+    const result = new Date(date);
+    result.setDate(result.getDate() + days);
+    return result;
+  }
+
+  sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+}
+
+// Exports
+export const leadOutreachService = new LeadOutreachService();
+export { leadTokens, getLeadTrackingUrl };
+export default leadOutreachService;
