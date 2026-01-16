@@ -5,9 +5,31 @@
 
 import express from 'express';
 import path from 'path';
+import crypto from 'crypto';
 import { campaignService } from '../services/campaignService.js';
+import emailService, { getResponseTimeText, EMAIL_TEMPLATES } from '../services/emailService.js';
+import logger from '../utils/logger.js';
 
 const router = express.Router();
+
+// Token storage for click tracking
+const clickTokens = new Map();
+
+// Generate tracking token for a contact
+function generateClickToken(contactId, action) {
+  const token = crypto.randomBytes(16).toString('hex');
+  clickTokens.set(token, { contactId, action, createdAt: new Date() });
+  // Auto-expire after 7 days (max safe timeout)
+  setTimeout(() => clickTokens.delete(token), 7 * 24 * 60 * 60 * 1000);
+  return token;
+}
+
+// Get tracking URL
+function getTrackingUrl(contactId, action) {
+  const token = generateClickToken(contactId, action);
+  const baseUrl = process.env.PUBLIC_URL || 'http://localhost:3001';
+  return `${baseUrl}/api/campaign/track/${action}/${token}`;
+}
 
 // ============================================
 // IMPORT ENDPOINTS
@@ -240,6 +262,56 @@ router.get('/contacts/:id/calendar.ics', async (req, res) => {
     res.send(ics);
   } catch (error) {
     res.status(500).json({ error: error.message });
+  }
+});
+
+router.get('/join/:id', async (req, res) => {
+  try {
+    const contacts = campaignService.getContacts();
+    const contact = contacts.find(c => c.id === req.params.id);
+
+    if (!contact) {
+      return res.status(404).send('Not found');
+    }
+
+    const slotDate = contact.scheduledSlot?.date;
+    if (!slotDate) {
+      return res.status(400).send('No scheduled slot');
+    }
+
+    const nowDate = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Europe/Berlin',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    }).format(new Date());
+
+    if (nowDate < slotDate) {
+      const html = `<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Zoom-Link noch nicht verfügbar</title>
+  </head>
+  <body style="font-family: Arial, sans-serif; padding: 24px;">
+    <h2 style="margin: 0 0 12px;">Der Zoom-Link ist noch nicht verfügbar</h2>
+    <p style="margin: 0 0 12px;">Dieser Link wird erst am Tag des Termins freigeschaltet.</p>
+    <p style="margin: 0; color: #666;">Termin: ${slotDate}</p>
+  </body>
+</html>`;
+
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      return res.status(200).send(html);
+    }
+
+    if (!contact.zoomJoinUrl) {
+      return res.status(404).send('Meeting not ready');
+    }
+
+    return res.redirect(contact.zoomJoinUrl);
+  } catch (error) {
+    res.status(500).send('Error');
   }
 });
 
@@ -552,5 +624,731 @@ router.post('/test/meeting-ended', async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
+
+// =============================================
+// DATA ENRICHMENT & SEGMENTATION
+// =============================================
+
+// POST /api/campaign/enrich - Enrich all contacts with segments and scores
+router.post('/enrich', async (req, res) => {
+  try {
+    const result = await campaignService.enrichAllContacts();
+    res.json({ success: true, ...result });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET /api/campaign/segments - Get segment statistics
+router.get('/segments', (req, res) => {
+  try {
+    const contacts = campaignService.getContacts();
+    const segments = {
+      jan_ok: contacts.filter(c => c.segment === 'jan_ok').length,
+      feb_soon: contacts.filter(c => c.segment === 'feb_soon').length,
+      march_late: contacts.filter(c => c.segment === 'march_late').length,
+      very_late: contacts.filter(c => c.segment === 'very_late').length,
+      no_meeting: contacts.filter(c => c.segment === 'no_meeting').length
+    };
+    
+    const priorities = {
+      high: contacts.filter(c => c.priority === 'high').length,
+      medium: contacts.filter(c => c.priority === 'medium').length,
+      low: contacts.filter(c => c.priority === 'low').length
+    };
+    
+    const replies = {
+      total: contacts.filter(c => c.hasReplied).length,
+      positive: contacts.filter(c => c.replySentiment === 'positive').length,
+      negative: contacts.filter(c => c.replySentiment === 'negative').length,
+      neutral: contacts.filter(c => c.replySentiment === 'neutral').length,
+      urgent: contacts.filter(c => c.replyCategory === 'urgent').length,
+      reschedule: contacts.filter(c => c.replyCategory === 'reschedule').length
+    };
+    
+    res.json({ success: true, segments, priorities, replies });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET /api/campaign/call-list - Get priority call list
+router.get('/call-list', (req, res) => {
+  try {
+    const { limit = 50, minScore = 30, segment, hasPhone } = req.query;
+    const list = campaignService.getPriorityCallList({
+      limit: parseInt(limit),
+      minScore: parseInt(minScore),
+      segment: segment || null,
+      hasPhone: hasPhone === 'true'
+    });
+    res.json({ success: true, count: list.length, contacts: list });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET /api/campaign/reengagement-list - Get contacts needing re-engagement
+router.get('/reengagement-list', (req, res) => {
+  try {
+    const list = campaignService.getReengagementList();
+    res.json({ success: true, count: list.length, contacts: list });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST /api/campaign/sync-replies - Sync email replies to contacts
+router.post('/sync-replies', async (req, res) => {
+  try {
+    const { emailService } = await import('../services/emailService.js');
+    
+    // Get campaign replies
+    const contacts = campaignService.getContacts();
+    const contactEmails = contacts.map(c => c.email).filter(Boolean);
+    const { replies } = await emailService.getCampaignReplies(contactEmails);
+    
+    // Sync to contacts
+    const result = await campaignService.syncRepliesToContacts(replies);
+    
+    // Re-enrich after sync
+    await campaignService.enrichAllContacts();
+    
+    res.json({ success: true, ...result, repliesFound: replies.length });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST /api/campaign/reengagement/:id/sent - Mark re-engagement sent
+router.post('/reengagement/:id/sent', (req, res) => {
+  try {
+    campaignService.markReengagementSent(req.params.id);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST /api/campaign/send-reengagement - Bulk send re-engagement emails
+router.post('/send-reengagement', async (req, res) => {
+  try {
+    const { limit = 110, dryRun = false } = req.body;
+    const { emailService } = await import('../services/emailService.js');
+    
+    // Get contacts needing re-engagement
+    const list = campaignService.getReengagementList();
+    const toSend = list.slice(0, limit);
+    
+    if (toSend.length === 0) {
+      return res.json({ success: true, sent: 0, message: 'No contacts need re-engagement' });
+    }
+    
+    const results = { sent: 0, failed: 0, errors: [] };
+    
+    for (const contact of toSend) {
+      try {
+        const anrede = contact.name ? `Hallo ${contact.name.split(' ')[0]}` : 'Guten Tag';
+        
+        // Generate tracking URLs for this contact
+        const quickCallUrl = getTrackingUrl(contact.id, 'quick-call');
+        const noInterestUrl = getTrackingUrl(contact.id, 'no-interest');
+        
+        if (!dryRun) {
+          await emailService.sendTemplateEmail({
+            to: contact.email,
+            templateId: 'reengagement_late',
+            variables: {
+              anrede,
+              monat: contact.monthName,
+              firma: contact.firma,
+              quick_call_url: quickCallUrl,
+              no_interest_url: noInterestUrl
+            }
+          });
+          
+          campaignService.markReengagementSent(contact.id);
+        }
+        
+        results.sent++;
+      } catch (error) {
+        results.failed++;
+        results.errors.push({ id: contact.id, email: contact.email, error: error.message });
+      }
+    }
+    
+    res.json({ 
+      success: true, 
+      dryRun,
+      ...results, 
+      remaining: list.length - toSend.length 
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET /api/campaign/reengagement-status - Get re-engagement progress
+router.get('/reengagement-status', (req, res) => {
+  try {
+    const contacts = campaignService.getContacts();
+    const lateContacts = contacts.filter(c => c.segment === 'march_late' || c.segment === 'very_late');
+    const sent = lateContacts.filter(c => c.reengagementSentAt).length;
+    const pending = lateContacts.filter(c => !c.reengagementSentAt).length;
+    
+    res.json({
+      success: true,
+      total: lateContacts.length,
+      sent,
+      pending,
+      percentComplete: lateContacts.length > 0 ? Math.round((sent / lateContacts.length) * 100) : 0
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET /api/campaign/actionable-replies - Get replies that need action
+router.get('/actionable-replies', (req, res) => {
+  try {
+    const contacts = campaignService.getContacts();
+    
+    const actionable = contacts
+      .filter(c => c.hasReplied && !c.replyHandledAt)
+      .map(c => ({
+        id: c.id,
+        name: `${c.vorname} ${c.nachname}`.trim() || c.firma,
+        firma: c.firma,
+        email: c.email,
+        telefon: c.telefon,
+        segment: c.segment,
+        priority: c.priority,
+        priorityScore: c.priorityScore,
+        replySentiment: c.replySentiment,
+        replyCategory: c.replyCategory,
+        lastReply: c.replies?.[c.replies.length - 1] || null,
+        suggestedAction: getSuggestedAction(c)
+      }))
+      .sort((a, b) => (b.priorityScore || 0) - (a.priorityScore || 0));
+    
+    res.json({ success: true, count: actionable.length, contacts: actionable });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+function getSuggestedAction(contact) {
+  if (contact.replyCategory === 'urgent') return '🔴 SOFORT ANRUFEN';
+  if (contact.replySentiment === 'negative') return '⚠️ Absage/Kündigung prüfen';
+  if (contact.replyCategory === 'reschedule') return '📅 Neuen Termin anbieten';
+  if (contact.replyCategory === 'question') return '📧 Frage beantworten';
+  if (contact.replySentiment === 'positive') return '✅ Bestätigung - evtl. danken';
+  return '📝 Manuell prüfen';
+}
+
+// POST /api/campaign/reply-handled/:id - Mark reply as handled
+router.post('/reply-handled/:id', (req, res) => {
+  try {
+    const { action, note } = req.body;
+    const contacts = campaignService.getContacts();
+    const idx = contacts.findIndex(c => c.id === req.params.id);
+    
+    if (idx >= 0) {
+      contacts[idx].replyHandledAt = new Date().toISOString();
+      contacts[idx].replyHandledAction = action || 'handled';
+      if (note) contacts[idx].replyHandledNote = note;
+      campaignService.saveCampaign();
+    }
+    
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// =============================================
+// CLICK TRACKING ENDPOINTS
+// =============================================
+
+// GET /api/campaign/track/:action/:token - Handle email button click
+router.get('/track/:action/:token', async (req, res) => {
+  const { action, token } = req.params;
+  const tokenData = clickTokens.get(token);
+  
+  if (!tokenData) {
+    return res.send(`
+      <html><body style="font-family: Arial; text-align: center; padding: 50px;">
+        <h2>⚠️ Link abgelaufen</h2>
+        <p>Bitte kontaktieren Sie uns direkt unter <a href="mailto:support@maklerplan.com">support@maklerplan.com</a></p>
+      </body></html>
+    `);
+  }
+  
+  const { contactId } = tokenData;
+  const contacts = campaignService.getContacts();
+  const contact = contacts.find(c => c.id === contactId);
+  
+  if (!contact) {
+    return res.send('<html><body><h2>Kontakt nicht gefunden</h2></body></html>');
+  }
+  
+  // Log the click
+  const idx = contacts.findIndex(c => c.id === contactId);
+  if (!contacts[idx].clickActions) contacts[idx].clickActions = [];
+  contacts[idx].clickActions.push({
+    action,
+    clickedAt: new Date().toISOString(),
+    token
+  });
+  contacts[idx].lastClickAction = action;
+  contacts[idx].lastClickAt = new Date().toISOString();
+  
+  // Update priority based on action
+  if (action === 'quick-call' || action === 'urgent') {
+    contacts[idx].replyCategory = 'urgent';
+    contacts[idx].priorityScore = Math.min(100, (contacts[idx].priorityScore || 0) + 30);
+    contacts[idx].priority = 'high';
+  }
+  
+  campaignService.saveCampaign();
+  
+  // Send WebSocket notification
+  try {
+    const ws = await import('../utils/websocket.js');
+    ws.broadcast({
+      type: 'EMERGENCY_CALL_REQUEST',
+      data: {
+        contactId,
+        action,
+        name: `${contact.vorname} ${contact.nachname}`.trim() || contact.firma,
+        firma: contact.firma,
+        email: contact.email,
+        telefon: contact.telefon,
+        timestamp: new Date().toISOString()
+      }
+    });
+  } catch (e) {
+    logger.warn('WebSocket broadcast failed', { error: e.message });
+  }
+  
+  logger.info(`🚨 CLICK: ${action} von ${contact.firma} (${contact.email})`);
+  
+  // Invalidate token (one-time use)
+  clickTokens.delete(token);
+  
+  // Show confirmation page based on action
+  const messages = {
+    'quick-call': {
+      title: '🚀 Schnell-Termin angefordert!',
+      body: 'Wir melden uns innerhalb von 2 Stunden bei Ihnen.'
+    },
+    'urgent': {
+      title: '📞 Rückruf angefordert!',
+      body: 'Wir rufen Sie so schnell wie möglich an.'
+    },
+    'book': {
+      title: '📅 Weiterleitung...',
+      body: 'Sie werden zu unserem Buchungstool weitergeleitet.',
+      redirect: 'https://booking.maklerplan.com'
+    },
+    'no-interest': {
+      title: '✅ Verstanden',
+      body: 'Sie werden keine weiteren Nachrichten erhalten.'
+    }
+  };
+  
+  const msg = messages[action] || { title: '✅ Aktion erfasst', body: 'Danke für Ihre Rückmeldung.' };
+  
+  if (msg.redirect) {
+    return res.redirect(msg.redirect);
+  }
+  
+  res.send(`
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1">
+      <title>Maklerplan</title>
+      <style>
+        body { font-family: Arial, sans-serif; text-align: center; padding: 50px; background: #f5f5f5; }
+        .card { background: white; max-width: 400px; margin: 0 auto; padding: 40px; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        h2 { color: #333; margin-bottom: 20px; }
+        p { color: #666; }
+        .contact { margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee; font-size: 14px; color: #999; }
+      </style>
+    </head>
+    <body>
+      <div class="card">
+        <h2>${msg.title}</h2>
+        <p>${msg.body}</p>
+        <p class="contact">
+          Maklerplan · +49 30 219 25007<br>
+          <a href="mailto:support@maklerplan.com">support@maklerplan.com</a>
+        </p>
+      </div>
+    </body>
+    </html>
+  `);
+});
+
+// POST /api/campaign/generate-tracking-links/:id - Generate tracking links for a contact
+router.post('/generate-tracking-links/:id', (req, res) => {
+  try {
+    const contactId = req.params.id;
+    const contact = campaignService.getContacts().find(c => c.id === contactId);
+    
+    if (!contact) {
+      return res.status(404).json({ error: 'Contact not found' });
+    }
+    
+    const links = {
+      quickCall: getTrackingUrl(contactId, 'quick-call'),
+      urgent: getTrackingUrl(contactId, 'urgent'),
+      book: getTrackingUrl(contactId, 'book'),
+      noInterest: getTrackingUrl(contactId, 'no-interest')
+    };
+    
+    res.json({ success: true, contactId, links });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET /api/campaign/click-requests - Get all pending click requests (emergency calls etc)
+router.get('/click-requests', (req, res) => {
+  try {
+    const contacts = campaignService.getContacts();
+    const requests = contacts
+      .filter(c => c.lastClickAction && !c.clickHandledAt)
+      .map(c => ({
+        id: c.id,
+        name: `${c.vorname} ${c.nachname}`.trim() || c.firma,
+        firma: c.firma,
+        email: c.email,
+        telefon: c.telefon,
+        action: c.lastClickAction,
+        clickedAt: c.lastClickAt,
+        allClicks: c.clickActions || []
+      }))
+      .sort((a, b) => new Date(b.clickedAt) - new Date(a.clickedAt));
+    
+    res.json({ success: true, count: requests.length, requests });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST /api/campaign/click-handled/:id - Mark click request as handled
+router.post('/click-handled/:id', (req, res) => {
+  try {
+    const contacts = campaignService.getContacts();
+    const idx = contacts.findIndex(c => c.id === req.params.id);
+    
+    if (idx >= 0) {
+      contacts[idx].clickHandledAt = new Date().toISOString();
+      contacts[idx].clickHandledBy = req.body.handledBy || 'system';
+      campaignService.saveCampaign();
+    }
+    
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET /api/campaign/daily-report - Get daily campaign report
+router.get('/daily-report', (req, res) => {
+  try {
+    const contacts = campaignService.getContacts();
+    const today = new Date().toISOString().split('T')[0];
+    
+    // Today's stats
+    const todayInvitations = contacts.filter(c => 
+      c.invitationSentAt?.startsWith(today)
+    ).length;
+    
+    const todayReminders = contacts.filter(c => 
+      c.reminderSentAt?.startsWith(today)
+    ).length;
+    
+    const todayReengagement = contacts.filter(c => 
+      c.reengagementSentAt?.startsWith(today)
+    ).length;
+    
+    const todayClicks = contacts.filter(c => 
+      c.lastClickAt?.startsWith(today)
+    ).map(c => ({
+      firma: c.firma,
+      action: c.lastClickAction,
+      time: c.lastClickAt
+    }));
+    
+    const todayReplies = contacts.filter(c => 
+      c.lastReplyAt?.startsWith(today)
+    ).map(c => ({
+      firma: c.firma,
+      sentiment: c.replySentiment,
+      category: c.replyCategory,
+      preview: c.replies?.[c.replies.length - 1]?.preview?.substring(0, 100)
+    }));
+    
+    // Overall stats
+    const stats = {
+      total: contacts.length,
+      invitationsSent: contacts.filter(c => c.invitationSentAt).length,
+      remindersSent: contacts.filter(c => c.reminderSentAt).length,
+      reengagementSent: contacts.filter(c => c.reengagementSentAt).length,
+      reengagementPending: contacts.filter(c => 
+        (c.segment === 'march_late' || c.segment === 'very_late') && !c.reengagementSentAt
+      ).length,
+      totalReplies: contacts.filter(c => c.hasReplied).length,
+      totalClicks: contacts.filter(c => c.lastClickAction).length,
+      urgentRequests: contacts.filter(c => 
+        c.lastClickAction === 'quick-call' && !c.clickHandledAt
+      ).length
+    };
+    
+    res.json({
+      success: true,
+      date: today,
+      today: {
+        invitations: todayInvitations,
+        reminders: todayReminders,
+        reengagement: todayReengagement,
+        clicks: todayClicks,
+        replies: todayReplies
+      },
+      overall: stats
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST /api/campaign/send-daily-report - Send daily report email to team
+router.post('/send-daily-report', async (req, res) => {
+  try {
+    const contacts = campaignService.getContacts();
+    const today = new Date().toISOString().split('T')[0];
+    const todayFormatted = new Date().toLocaleDateString('de-DE', { 
+      weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' 
+    });
+    
+    // Collect stats
+    const todayInvitations = contacts.filter(c => c.invitationSentAt?.startsWith(today)).length;
+    const todayReminders = contacts.filter(c => c.reminderSentAt?.startsWith(today)).length;
+    const todayReengagement = contacts.filter(c => c.reengagementSentAt?.startsWith(today)).length;
+    const todayClicks = contacts.filter(c => c.lastClickAt?.startsWith(today)).length;
+    const todayReplies = contacts.filter(c => c.lastReplyAt?.startsWith(today)).length;
+    const urgentRequests = contacts.filter(c => c.lastClickAction === 'quick-call' && !c.clickHandledAt).length;
+    
+    const totalReengagement = contacts.filter(c => c.reengagementSentAt).length;
+    const pendingReengagement = contacts.filter(c => 
+      (c.segment === 'march_late' || c.segment === 'very_late') && !c.reengagementSentAt
+    ).length;
+    
+    // Build urgent section if needed
+    let urgentSection = '';
+    if (urgentRequests > 0) {
+      const urgentContacts = contacts
+        .filter(c => c.lastClickAction === 'quick-call' && !c.clickHandledAt)
+        .slice(0, 5);
+      
+      urgentSection = `
+        <h2 style="color: #e74c3c; border-bottom: 2px solid #e74c3c; padding-bottom: 10px;">🚨 Sofort anrufen!</h2>
+        <ul style="list-style: none; padding: 0;">
+          ${urgentContacts.map(c => `
+            <li style="background: #fff3cd; padding: 10px; margin: 5px 0; border-radius: 4px;">
+              <strong>${c.firma || c.nachname}</strong><br>
+              📞 ${c.telefon || 'keine Nummer'} · ✉️ ${c.email}
+            </li>
+          `).join('')}
+        </ul>
+      `;
+    }
+    
+    // Send report
+    const recipients = req.body.recipients || ['support@maklerplan.com'];
+    
+    await emailService.sendEmail({
+      to: recipients,
+      subject: emailService.replaceVariables(EMAIL_TEMPLATES.daily_report.subject, { datum: todayFormatted }),
+      body: emailService.replaceVariables(EMAIL_TEMPLATES.daily_report.body, {
+        datum: todayFormatted,
+        today_invitations: todayInvitations.toString(),
+        today_reminders: todayReminders.toString(),
+        today_reengagement: todayReengagement.toString(),
+        today_clicks: todayClicks.toString(),
+        today_replies: todayReplies.toString(),
+        urgent_requests: urgentRequests.toString(),
+        total_contacts: contacts.length.toString(),
+        total_invitations: contacts.filter(c => c.invitationSentAt).length.toString(),
+        total_reengagement: totalReengagement.toString(),
+        pending_reengagement: pendingReengagement.toString(),
+        total_replies: contacts.filter(c => c.hasReplied).length.toString(),
+        urgent_section: urgentSection
+      })
+    });
+    
+    logger.info(`📊 Daily report sent to ${recipients.join(', ')}`);
+    res.json({ success: true, sentTo: recipients });
+  } catch (error) {
+    logger.error('Send daily report error', { error: error.message });
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST /api/campaign/auto-reply/:id - Send auto-reply based on category
+router.post('/auto-reply/:id', async (req, res) => {
+  try {
+    const contacts = campaignService.getContacts();
+    const contact = contacts.find(c => c.id === req.params.id);
+    
+    if (!contact) {
+      return res.status(404).json({ error: 'Contact not found' });
+    }
+    
+    // Determine template based on category
+    const category = req.body.category || contact.replyCategory || 'question';
+    const templateMap = {
+      'reschedule': 'auto_reply_reschedule',
+      'question': 'auto_reply_question',
+      'cancel': 'auto_reply_cancel',
+      'negative': 'auto_reply_cancel',
+      'positive': 'auto_reply_positive',
+      'urgent': 'auto_reply_positive'
+    };
+    
+    const templateId = templateMap[category] || 'auto_reply_question';
+    const template = EMAIL_TEMPLATES[templateId];
+    
+    if (!template) {
+      return res.status(400).json({ error: 'Template not found' });
+    }
+    
+    const anrede = contact.anrede === 'Frau' ? 'Sehr geehrte Frau ' + (contact.nachname || '') :
+                   contact.anrede === 'Herr' ? 'Sehr geehrter Herr ' + (contact.nachname || '') :
+                   'Guten Tag';
+    
+    // Calculate smart response time based on weekends/holidays
+    const isUrgent = category === 'positive' || category === 'urgent';
+    const responseTime = getResponseTimeText(isUrgent);
+    
+    await emailService.sendEmail({
+      to: contact.email,
+      replyTo: 'support@maklerplan.com',
+      subject: emailService.replaceVariables(template.subject, { firma: contact.firma }),
+      body: emailService.replaceVariables(template.body, {
+        anrede,
+        firma: contact.firma,
+        response_time: responseTime
+      })
+    });
+    
+    // Mark as replied
+    const idx = contacts.findIndex(c => c.id === req.params.id);
+    contacts[idx].autoReplySentAt = new Date().toISOString();
+    contacts[idx].autoReplyTemplate = templateId;
+    campaignService.saveCampaign();
+    
+    logger.info(`📧 Auto-reply (${templateId}) sent to ${contact.email}`);
+    res.json({ success: true, template: templateId, sentTo: contact.email });
+  } catch (error) {
+    logger.error('Auto-reply error', { error: error.message });
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST /api/campaign/process-replies - Auto-process all pending replies
+router.post('/process-replies', async (req, res) => {
+  try {
+    const contacts = campaignService.getContacts();
+    const { dryRun = true } = req.body;
+    
+    const pending = contacts.filter(c => 
+      c.hasReplied && !c.replyHandledAt && !c.autoReplySentAt
+    );
+    
+    const results = [];
+    
+    for (const contact of pending) {
+      const category = contact.replyCategory || 'other';
+      
+      // Skip 'other' - needs manual review
+      if (category === 'other') {
+        results.push({
+          id: contact.id,
+          firma: contact.firma,
+          category,
+          action: 'skip_manual_review',
+          sent: false
+        });
+        continue;
+      }
+      
+      if (!dryRun) {
+        // Actually send auto-reply
+        const templateMap = {
+          'reschedule': 'auto_reply_reschedule',
+          'question': 'auto_reply_question',
+          'cancel': 'auto_reply_cancel',
+          'negative': 'auto_reply_cancel',
+          'positive': 'auto_reply_positive',
+          'urgent': 'auto_reply_positive'
+        };
+        
+        const templateId = templateMap[category];
+        if (templateId) {
+          const template = EMAIL_TEMPLATES[templateId];
+          const anrede = contact.anrede === 'Frau' ? 'Sehr geehrte Frau ' + (contact.nachname || '') :
+                         contact.anrede === 'Herr' ? 'Sehr geehrter Herr ' + (contact.nachname || '') :
+                         'Guten Tag';
+          
+          // Smart response time based on weekends/holidays
+          const isUrgent = category === 'positive' || category === 'urgent';
+          const responseTime = getResponseTimeText(isUrgent);
+          
+          await emailService.sendEmail({
+            to: contact.email,
+            replyTo: 'support@maklerplan.com',
+            subject: emailService.replaceVariables(template.subject, { firma: contact.firma }),
+            body: emailService.replaceVariables(template.body, { anrede, firma: contact.firma, response_time: responseTime })
+          });
+          
+          const idx = contacts.findIndex(c => c.id === contact.id);
+          contacts[idx].autoReplySentAt = new Date().toISOString();
+          contacts[idx].autoReplyTemplate = templateId;
+        }
+      }
+      
+      results.push({
+        id: contact.id,
+        firma: contact.firma,
+        email: contact.email,
+        category,
+        action: dryRun ? 'would_send' : 'sent',
+        sent: !dryRun
+      });
+    }
+    
+    if (!dryRun) {
+      campaignService.saveCampaign();
+    }
+    
+    res.json({
+      success: true,
+      dryRun,
+      total: pending.length,
+      processed: results.filter(r => r.action !== 'skip_manual_review').length,
+      skipped: results.filter(r => r.action === 'skip_manual_review').length,
+      results
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Export tracking URL generator for use in other modules
+export { getTrackingUrl };
 
 export default router;

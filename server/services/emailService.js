@@ -7,6 +7,89 @@ import { ClientSecretCredential } from '@azure/identity';
 import { Client } from '@microsoft/microsoft-graph-client';
 import { TokenCredentialAuthenticationProvider } from '@microsoft/microsoft-graph-client/authProviders/azureTokenCredentials/index.js';
 import logger from '../utils/logger.js';
+import { SEQUENCE_EMAIL_TEMPLATES } from '../templates/sequenceTemplates.js';
+
+// Deutsche Feiertage 2026 (bundesweit)
+const GERMAN_HOLIDAYS_2026 = [
+  '2026-01-01', // Neujahr
+  '2026-04-03', // Karfreitag
+  '2026-04-06', // Ostermontag
+  '2026-05-01', // Tag der Arbeit
+  '2026-05-14', // Christi Himmelfahrt
+  '2026-05-25', // Pfingstmontag
+  '2026-10-03', // Tag der Deutschen Einheit
+  '2026-12-25', // 1. Weihnachtstag
+  '2026-12-26', // 2. Weihnachtstag
+];
+
+/**
+ * Berechnet den nächsten Werktag (Mo-Fr, keine Feiertage)
+ */
+function getNextBusinessDay(fromDate = new Date()) {
+  const date = new Date(fromDate);
+  let daysToAdd = 1;
+  
+  // Wenn nach 17 Uhr, starten wir von morgen
+  const hour = date.getHours();
+  if (hour >= 17) {
+    date.setDate(date.getDate() + 1);
+  }
+  
+  // Prüfe nächste 10 Tage
+  for (let i = 0; i < 10; i++) {
+    const checkDate = new Date(date);
+    checkDate.setDate(date.getDate() + daysToAdd);
+    
+    const dayOfWeek = checkDate.getDay();
+    const dateStr = checkDate.toISOString().split('T')[0];
+    
+    // Wochenende überspringen
+    if (dayOfWeek === 0 || dayOfWeek === 6) {
+      daysToAdd++;
+      continue;
+    }
+    
+    // Feiertag überspringen
+    if (GERMAN_HOLIDAYS_2026.includes(dateStr)) {
+      daysToAdd++;
+      continue;
+    }
+    
+    // Gültiger Werktag gefunden
+    return { date: checkDate, daysAway: daysToAdd };
+  }
+  
+  return { date: new Date(date.getTime() + 86400000), daysAway: 1 };
+}
+
+/**
+ * Gibt menschenlesbaren Response-Text zurück
+ */
+function getResponseTimeText(urgent = false) {
+  const now = new Date();
+  const hour = now.getHours();
+  const { daysAway } = getNextBusinessDay(now);
+  
+  // Dringend: Noch heute (wenn vor 16 Uhr)
+  if (urgent && hour < 16) {
+    return 'noch heute';
+  }
+  
+  // Morgen ist Werktag
+  if (daysAway === 1) {
+    return 'morgen';
+  }
+  
+  // Übermorgen
+  if (daysAway === 2) {
+    return 'am Montag'; // Wahrscheinlich Wochenende
+  }
+  
+  // Mehr als 2 Tage (Feiertage)
+  const nextDay = getNextBusinessDay(now);
+  const options = { weekday: 'long' };
+  return 'am ' + nextDay.date.toLocaleDateString('de-DE', options);
+}
 
 class EmailService {
   constructor() {
@@ -45,7 +128,7 @@ class EmailService {
   /**
    * E-Mail senden
    */
-  async sendEmail({ to, subject, body, isHtml = true, cc = [], bcc = [], attachments = [] }) {
+  async sendEmail({ to, subject, body, isHtml = true, cc = [], bcc = [], replyTo = null, attachments = [] }) {
     if (!this.initialized) {
       await this.initialize();
     }
@@ -64,6 +147,11 @@ class EmailService {
       ccRecipients: this.formatRecipients(cc),
       bccRecipients: this.formatRecipients(bcc)
     };
+
+    // Set reply-to address if specified
+    if (replyTo) {
+      message.replyTo = this.formatRecipients(replyTo);
+    }
 
     if (attachments.length > 0) {
       message.attachments = attachments.map(att => ({
@@ -177,6 +265,134 @@ class EmailService {
         </div>
       `
     });
+  }
+
+  /**
+   * Inbox-Nachrichten abrufen
+   */
+  async getInboxMessages({ folder = 'inbox', limit = 50, filter = null, orderBy = 'receivedDateTime desc' } = {}) {
+    if (!this.initialized) {
+      await this.initialize();
+    }
+
+    if (!this.client) {
+      throw new Error('Email Service nicht initialisiert');
+    }
+
+    try {
+      let request = this.client
+        .api(`/users/${this.fromEmail}/mailFolders/${folder}/messages`)
+        .top(limit)
+        .orderby(orderBy)
+        .select('id,subject,from,receivedDateTime,bodyPreview,isRead,conversationId');
+
+      if (filter) {
+        request = request.filter(filter);
+      }
+
+      const result = await request.get();
+      
+      logger.info(`📥 Inbox: ${result.value.length} Nachrichten abgerufen`);
+      
+      return result.value.map(msg => ({
+        id: msg.id,
+        subject: msg.subject,
+        from: msg.from?.emailAddress?.address,
+        fromName: msg.from?.emailAddress?.name,
+        receivedAt: msg.receivedDateTime,
+        preview: msg.bodyPreview,
+        isRead: msg.isRead,
+        conversationId: msg.conversationId
+      }));
+    } catch (error) {
+      logger.error('Inbox read error', { error: error.message });
+      throw new Error(`Inbox lesen fehlgeschlagen: ${error.message}`);
+    }
+  }
+
+  /**
+   * Einzelne E-Mail abrufen (mit Body)
+   */
+  async getMessage(messageId) {
+    if (!this.initialized) await this.initialize();
+    if (!this.client) throw new Error('Email Service nicht initialisiert');
+
+    try {
+      const msg = await this.client
+        .api(`/users/${this.fromEmail}/messages/${messageId}`)
+        .select('id,subject,from,receivedDateTime,body,isRead,conversationId')
+        .get();
+
+      return {
+        id: msg.id,
+        subject: msg.subject,
+        from: msg.from?.emailAddress?.address,
+        fromName: msg.from?.emailAddress?.name,
+        receivedAt: msg.receivedDateTime,
+        body: msg.body?.content,
+        isRead: msg.isRead,
+        conversationId: msg.conversationId
+      };
+    } catch (error) {
+      logger.error('Get message error', { error: error.message });
+      throw error;
+    }
+  }
+
+  /**
+   * Kampagnen-Antworten finden
+   * Filtert Inbox nach Absender-Emails aus Kontaktliste
+   */
+  async getCampaignReplies(contactEmails, since = null) {
+    if (!this.initialized) await this.initialize();
+    if (!this.client) throw new Error('Email Service nicht initialisiert');
+
+    try {
+      // Inbox abrufen
+      const messages = await this.getInboxMessages({ 
+        limit: 200,
+        filter: since ? `receivedDateTime ge ${since}` : null
+      });
+
+      // Nach Kontakt-Emails filtern
+      const emailSet = new Set(contactEmails.map(e => e.toLowerCase()));
+      const replies = messages.filter(msg => 
+        msg.from && emailSet.has(msg.from.toLowerCase())
+      );
+
+      logger.info(`📨 Campaign Replies: ${replies.length} von ${messages.length} Nachrichten`);
+
+      return {
+        total: messages.length,
+        campaignReplies: replies.length,
+        replies: replies.map(r => ({
+          ...r,
+          contactEmail: r.from
+        }))
+      };
+    } catch (error) {
+      logger.error('Campaign replies error', { error: error.message });
+      throw error;
+    }
+  }
+
+  /**
+   * Antworten nach Kontakt gruppieren
+   */
+  async getRepliesByContact(contacts) {
+    const contactEmails = contacts.map(c => c.email).filter(Boolean);
+    const { replies } = await this.getCampaignReplies(contactEmails);
+
+    // Nach Kontakt zuordnen
+    const emailToContact = {};
+    contacts.forEach(c => {
+      if (c.email) emailToContact[c.email.toLowerCase()] = c;
+    });
+
+    return replies.map(reply => ({
+      ...reply,
+      contact: emailToContact[reply.from?.toLowerCase()] || null
+    }));
   }
 }
 
@@ -579,8 +795,247 @@ export const EMAIL_TEMPLATES = {
         {{sender_phone}}</p>
       </div>
     `
+  },
+
+  // =============================================
+  // RE-ENGAGEMENT TEMPLATES
+  // =============================================
+
+  reengagement_late: {
+    id: 'reengagement_late',
+    name: 'Re-Engagement - Später Termin',
+    subject: 'Ehrlich gesagt: Wir haben übertrieben 🙈',
+    body: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <div style="background: #fff; padding: 15px 20px; text-align: center; border: 1px solid #e0e0e0; border-bottom: none; border-radius: 8px 8px 0 0;">
+          <span style="display: inline-block; width: 28px; height: 28px; background-color: #5CBF8E; border-radius: 4px; vertical-align: middle; margin-right: 8px; line-height: 28px; color: white; font-weight: bold; font-size: 16px;">M</span><span style="font-size: 20px; font-weight: 300; color: #105156; letter-spacing: 0.5px; vertical-align: middle;">MAKLER</span><span style="font-size: 20px; font-weight: 600; color: #5CBF8E; letter-spacing: 0.5px; vertical-align: middle;">PLAN</span>
+        </div>
+        
+        <div style="padding: 25px; background: #fff; border: 1px solid #e0e0e0; border-top: none;">
+          <p>{{anrede}},</p>
+          
+          <p>kurz und ehrlich: <strong>Wir haben einen Fehler gemacht.</strong></p>
+          
+          <p>Sie haben eine Einladung zum "Neujahres-Update" bekommen – aber Ihr Termin ist erst im <strong>{{monat}}</strong>. Das passt natürlich nicht zusammen.</p>
+          
+          <div style="background: #fff8e6; padding: 15px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #f5a623;">
+            <p style="margin: 0;"><strong>Deshalb unser Angebot:</strong></p>
+            <p style="margin: 10px 0 0;">Wir können auch <strong>kurzfristig</strong> sprechen – diese oder nächste Woche, auch samstags.</p>
+          </div>
+          
+          <p><strong>Was würde Ihnen am meisten helfen?</strong></p>
+          
+          <div style="margin: 20px 0;">
+            <a href="{{quick_call_url}}" style="display: inline-block; background: #e74c3c; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; margin: 5px 5px 5px 0; font-weight: 600;">
+              🚀 Schnell-Termin (diese Woche)
+            </a>
+            <a href="https://booking.maklerplan.com" style="display: inline-block; background: #667eea; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; margin: 5px; font-weight: 600;">
+              📅 Selbst buchen
+            </a>
+          </div>
+          
+          <div style="margin: 20px 0;">
+            <a href="mailto:support@maklerplan.com?subject=Frage von {{firma}}" style="display: inline-block; background: #3498db; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; margin: 5px 5px 5px 0;">
+              📧 Frage per E-Mail
+            </a>
+            <a href="{{no_interest_url}}" style="display: inline-block; background: #95a5a6; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; margin: 5px;">
+              ❌ Kein Bedarf
+            </a>
+          </div>
+          
+          <p style="color: #666; font-size: 14px; margin-top: 25px;">
+            Oder antworten Sie einfach auf diese E-Mail – wir melden uns persönlich.
+          </p>
+          
+          <p style="margin-top: 30px;">
+            Herzliche Grüße<br>
+            <strong>Herbert Nicklaus</strong><br>
+            Maklerplan Team
+          </p>
+        </div>
+        
+        <div style="background: #f5f5f5; padding: 15px; text-align: center; font-size: 11px; color: #666; border-radius: 0 0 8px 8px;">
+          Maklerplan · support@maklerplan.com · +49 30 219 25007
+        </div>
+      </div>
+    `
+  },
+
+  emergency_call_request: {
+    id: 'emergency_call_request',
+    name: 'Emergency Call Bestätigung',
+    subject: '✅ Rückruf-Anfrage erhalten - {{firma}}',
+    body: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <div style="background: #5CBF8E; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0;">
+          <h2 style="margin: 0;">✅ Anfrage erhalten!</h2>
+        </div>
+        
+        <div style="padding: 25px; background: #fff; border: 1px solid #e0e0e0; border-top: none; border-radius: 0 0 8px 8px;">
+          <p>{{anrede}},</p>
+          
+          <p>Ihre Rückruf-Anfrage ist bei uns eingegangen.</p>
+          
+          <div style="background: #e8f5e9; padding: 15px; border-radius: 8px; margin: 20px 0;">
+            <p style="margin: 0;"><strong>Wir melden uns innerhalb der nächsten 2 Stunden.</strong></p>
+          </div>
+          
+          <p>Falls Sie uns nicht erreichen können, rufen Sie gerne direkt an:<br>
+          📞 <strong>+49 30 219 25007</strong></p>
+          
+          <p>Bis gleich!<br>
+          Ihr Maklerplan Team</p>
+        </div>
+      </div>
+    `
+  },
+
+  ...SEQUENCE_EMAIL_TEMPLATES,
+
+  // =============================================
+  // AUTO-REPLY TEMPLATES
+  // =============================================
+
+  auto_reply_reschedule: {
+    id: 'auto_reply_reschedule',
+    name: 'Auto-Reply - Termin verschieben',
+    subject: 'Re: Terminverschiebung für {{firma}}',
+    body: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <p>{{anrede}},</p>
+        
+        <p>vielen Dank für Ihre Nachricht!</p>
+        
+        <p>Kein Problem – wir können den Termin gerne verschieben.</p>
+        
+        <p><strong>Buchen Sie einfach einen neuen Termin:</strong></p>
+        <p><a href="https://booking.maklerplan.com" style="display: inline-block; background: #667eea; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px;">📅 Neuen Termin wählen</a></p>
+        
+        <p>Oder nennen Sie uns 2-3 alternative Termine – wir melden uns umgehend.</p>
+        
+        <p>Herzliche Grüße<br>
+        <strong>Ihr Maklerplan Team</strong><br>
+        📞 +49 30 219 25007</p>
+      </div>
+    `
+  },
+
+  auto_reply_question: {
+    id: 'auto_reply_question',
+    name: 'Auto-Reply - Frage erhalten',
+    subject: 'Re: Ihre Anfrage - {{firma}}',
+    body: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <p>{{anrede}},</p>
+        
+        <p>vielen Dank für Ihre Nachricht!</p>
+        
+        <p>Wir haben Ihre Anfrage erhalten und melden uns <strong>{{response_time}}</strong> mit einer ausführlichen Antwort.</p>
+        
+        <p>Falls es dringend ist, erreichen Sie uns direkt unter:<br>
+        📞 <strong>+49 30 219 25007</strong></p>
+        
+        <p>Herzliche Grüße<br>
+        <strong>Ihr Maklerplan Team</strong></p>
+      </div>
+    `
+  },
+
+  auto_reply_cancel: {
+    id: 'auto_reply_cancel',
+    name: 'Auto-Reply - Kündigung/Absage',
+    subject: 'Re: Ihre Nachricht - {{firma}}',
+    body: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <p>{{anrede}},</p>
+        
+        <p>vielen Dank für Ihre Nachricht.</p>
+        
+        <p>Wir haben Ihr Anliegen an unseren Kundendienst weitergeleitet. Sie erhalten <strong>{{response_time}}</strong> eine Bestätigung.</p>
+        
+        <p>Bei dringenden Fragen erreichen Sie uns unter:<br>
+        📞 <strong>+49 30 219 25007</strong></p>
+        
+        <p>Mit freundlichen Grüßen<br>
+        <strong>Ihr Maklerplan Team</strong></p>
+      </div>
+    `
+  },
+
+  auto_reply_positive: {
+    id: 'auto_reply_positive',
+    name: 'Auto-Reply - Interesse',
+    subject: 'Re: {{firma}} - Wir freuen uns!',
+    body: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <p>{{anrede}},</p>
+        
+        <p>vielen Dank für Ihre positive Rückmeldung! 🎉</p>
+        
+        <p>Wir melden uns <strong>{{response_time}}</strong> bei Ihnen, um alles Weitere zu besprechen.</p>
+        
+        <p><strong>Falls Sie nicht warten möchten:</strong></p>
+        <p><a href="https://booking.maklerplan.com" style="display: inline-block; background: #5CBF8E; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px;">📅 Jetzt Termin buchen</a></p>
+        
+        <p>Bis bald!<br>
+        <strong>Ihr Maklerplan Team</strong><br>
+        📞 +49 30 219 25007</p>
+      </div>
+    `
+  },
+
+  // Daily Report Template
+  daily_report: {
+    id: 'daily_report',
+    name: 'Täglicher Kampagnen-Report',
+    subject: '📊 Kampagnen-Report {{datum}}',
+    body: `
+      <div style="font-family: Arial, sans-serif; max-width: 700px; margin: 0 auto;">
+        <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 25px; text-align: center; border-radius: 8px 8px 0 0;">
+          <h1 style="margin: 0; font-size: 24px;">📊 Täglicher Kampagnen-Report</h1>
+          <p style="margin: 10px 0 0; opacity: 0.9;">{{datum}}</p>
+        </div>
+        
+        <div style="padding: 25px; background: #fff; border: 1px solid #e0e0e0; border-top: none;">
+          
+          <h2 style="color: #333; border-bottom: 2px solid #667eea; padding-bottom: 10px;">📬 Heute versendet</h2>
+          <table style="width: 100%; border-collapse: collapse; margin: 15px 0;">
+            <tr><td style="padding: 8px; border-bottom: 1px solid #eee;">Einladungen</td><td style="padding: 8px; border-bottom: 1px solid #eee; text-align: right; font-weight: bold;">{{today_invitations}}</td></tr>
+            <tr><td style="padding: 8px; border-bottom: 1px solid #eee;">Erinnerungen</td><td style="padding: 8px; border-bottom: 1px solid #eee; text-align: right; font-weight: bold;">{{today_reminders}}</td></tr>
+            <tr><td style="padding: 8px; border-bottom: 1px solid #eee;">Re-Engagement</td><td style="padding: 8px; border-bottom: 1px solid #eee; text-align: right; font-weight: bold;">{{today_reengagement}}</td></tr>
+          </table>
+          
+          <h2 style="color: #333; border-bottom: 2px solid #5CBF8E; padding-bottom: 10px;">🔔 Aktionen heute</h2>
+          <table style="width: 100%; border-collapse: collapse; margin: 15px 0;">
+            <tr><td style="padding: 8px; border-bottom: 1px solid #eee;">Button-Klicks</td><td style="padding: 8px; border-bottom: 1px solid #eee; text-align: right; font-weight: bold;">{{today_clicks}}</td></tr>
+            <tr><td style="padding: 8px; border-bottom: 1px solid #eee;">Email-Antworten</td><td style="padding: 8px; border-bottom: 1px solid #eee; text-align: right; font-weight: bold;">{{today_replies}}</td></tr>
+            <tr style="background: #fff3cd;"><td style="padding: 8px; border-bottom: 1px solid #eee;"><strong>🚨 Urgent Requests</strong></td><td style="padding: 8px; border-bottom: 1px solid #eee; text-align: right; font-weight: bold; color: #e74c3c;">{{urgent_requests}}</td></tr>
+          </table>
+          
+          <h2 style="color: #333; border-bottom: 2px solid #3498db; padding-bottom: 10px;">📈 Gesamt-Übersicht</h2>
+          <table style="width: 100%; border-collapse: collapse; margin: 15px 0;">
+            <tr><td style="padding: 8px; border-bottom: 1px solid #eee;">Kontakte gesamt</td><td style="padding: 8px; border-bottom: 1px solid #eee; text-align: right;">{{total_contacts}}</td></tr>
+            <tr><td style="padding: 8px; border-bottom: 1px solid #eee;">Einladungen gesendet</td><td style="padding: 8px; border-bottom: 1px solid #eee; text-align: right;">{{total_invitations}}</td></tr>
+            <tr><td style="padding: 8px; border-bottom: 1px solid #eee;">Re-Engagement gesendet</td><td style="padding: 8px; border-bottom: 1px solid #eee; text-align: right;">{{total_reengagement}}</td></tr>
+            <tr><td style="padding: 8px; border-bottom: 1px solid #eee;">Re-Engagement ausstehend</td><td style="padding: 8px; border-bottom: 1px solid #eee; text-align: right;">{{pending_reengagement}}</td></tr>
+            <tr><td style="padding: 8px; border-bottom: 1px solid #eee;">Antworten erhalten</td><td style="padding: 8px; border-bottom: 1px solid #eee; text-align: right;">{{total_replies}}</td></tr>
+          </table>
+          
+          {{urgent_section}}
+          
+          <div style="background: #f5f5f5; padding: 15px; border-radius: 8px; margin-top: 20px; text-align: center;">
+            <a href="http://localhost:3001/api/campaign/daily-report" style="color: #667eea; text-decoration: none;">📊 Live-Dashboard öffnen</a>
+          </div>
+        </div>
+        
+        <div style="background: #f5f5f5; padding: 15px; text-align: center; font-size: 11px; color: #666; border-radius: 0 0 8px 8px;">
+          Automatisch generiert · Maklerplan Kampagnen-System
+        </div>
+      </div>
+    `
   }
 };
 
 export const emailService = new EmailService();
+export { getResponseTimeText, getNextBusinessDay };
 export default emailService;

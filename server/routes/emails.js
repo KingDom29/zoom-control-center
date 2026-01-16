@@ -284,4 +284,131 @@ router.get('/status', async (req, res) => {
   }
 });
 
+// =============================================
+// INBOX & REPLY TRACKING
+// =============================================
+
+// GET /api/emails/inbox - Inbox-Nachrichten abrufen
+router.get('/inbox', async (req, res) => {
+  try {
+    const { limit = 50, folder = 'inbox' } = req.query;
+    const messages = await emailService.getInboxMessages({ 
+      folder, 
+      limit: parseInt(limit) 
+    });
+    res.json({ 
+      success: true, 
+      count: messages.length,
+      messages 
+    });
+  } catch (error) {
+    logger.error('Inbox read error', { error: error.message });
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// GET /api/emails/inbox/:id - Einzelne E-Mail mit Body
+router.get('/inbox/:id', async (req, res) => {
+  try {
+    const message = await emailService.getMessage(req.params.id);
+    res.json({ success: true, message });
+  } catch (error) {
+    logger.error('Get message error', { error: error.message });
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// GET /api/emails/campaign-replies - Antworten auf Kampagne
+router.get('/campaign-replies', async (req, res) => {
+  try {
+    const { since } = req.query;
+    
+    // Kampagnen-Daten laden
+    const fs = await import('fs');
+    const path = await import('path');
+    const campaignPath = path.join(process.cwd(), 'server/data/campaign.json');
+    const campaign = JSON.parse(fs.readFileSync(campaignPath, 'utf8'));
+    
+    // Kontakt-Emails extrahieren
+    const contactEmails = campaign.contacts
+      .map(c => c.email)
+      .filter(Boolean);
+    
+    // Antworten abrufen
+    const result = await emailService.getCampaignReplies(contactEmails, since);
+    
+    // Mit Kontakt-Daten anreichern
+    const emailToContact = {};
+    campaign.contacts.forEach(c => {
+      if (c.email) emailToContact[c.email.toLowerCase()] = {
+        id: c.id,
+        name: `${c.vorname} ${c.nachname}`.trim(),
+        firma: c.firma,
+        status: c.status,
+        attendanceStatus: c.attendanceStatus
+      };
+    });
+    
+    const enrichedReplies = result.replies.map(r => ({
+      ...r,
+      contact: emailToContact[r.from?.toLowerCase()] || null
+    }));
+    
+    res.json({
+      success: true,
+      totalInbox: result.total,
+      campaignReplies: result.campaignReplies,
+      replies: enrichedReplies
+    });
+  } catch (error) {
+    logger.error('Campaign replies error', { error: error.message });
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// GET /api/emails/reply-stats - Antwort-Statistiken
+router.get('/reply-stats', async (req, res) => {
+  try {
+    const fs = await import('fs');
+    const path = await import('path');
+    const campaignPath = path.join(process.cwd(), 'server/data/campaign.json');
+    const campaign = JSON.parse(fs.readFileSync(campaignPath, 'utf8'));
+    
+    const contactEmails = campaign.contacts.map(c => c.email).filter(Boolean);
+    const result = await emailService.getCampaignReplies(contactEmails);
+    
+    // Kategorisierung nach Betreff
+    const categories = {
+      confirmation: 0,
+      reschedule: 0,
+      cancel: 0,
+      question: 0,
+      other: 0
+    };
+    
+    result.replies.forEach(r => {
+      const subject = (r.subject || '').toLowerCase();
+      if (subject.includes('bestätig') || subject.includes('confirm')) categories.confirmation++;
+      else if (subject.includes('verschie') || subject.includes('termin')) categories.reschedule++;
+      else if (subject.includes('absag') || subject.includes('cancel')) categories.cancel++;
+      else if (subject.includes('frage') || subject.includes('?')) categories.question++;
+      else categories.other++;
+    });
+    
+    res.json({
+      success: true,
+      stats: {
+        totalContacts: campaign.contacts.length,
+        invitationsSent: campaign.contacts.filter(c => c.invitationSentAt).length,
+        repliesReceived: result.campaignReplies,
+        replyRate: ((result.campaignReplies / campaign.contacts.length) * 100).toFixed(2) + '%',
+        categories
+      }
+    });
+  } catch (error) {
+    logger.error('Reply stats error', { error: error.message });
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 export default router;

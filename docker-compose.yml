@@ -1,0 +1,37 @@
+version: '3.8'
+
+services:
+  zoom-control-center:
+    build: .
+    container_name: zoom-control-center
+    ports:
+      - "3001:3001"
+    volumes:
+      - ./server/data:/app/server/data
+      - ./logs:/app/logs
+    env_file:
+      - .env
+    environment:
+      - NODE_ENV=production
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3001/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  ngrok:
+    image: ngrok/ngrok:latest
+    container_name: ngrok
+    restart: unless-stopped
+    command:
+      - "http"
+      - "zoom-control-center:3001"
+      - "--log=stdout"
+    ports:
+      - "4040:4040"
+    environment:
+      - NGROK_AUTHTOKEN=${NGROK_AUTHTOKEN}
+    depends_on:
+      - zoom-control-center

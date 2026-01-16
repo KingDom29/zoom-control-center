@@ -29,3 +29,10 @@ coverage/
 *.old
 *.orig
 *~
+
+# Campaign data (contains personal data)
+server/data/campaign.json
+server/data/*.backup.json
+
+# Autostart logs
+scripts/*.log

@@ -522,17 +522,16 @@ class CampaignService {
         const icsBase64 = Buffer.from(icsContent, 'utf-8').toString('base64');
         
         // Send to customer + team (CC)
-        const team = CAMPAIGN_CONFIG.team;
         await emailService.sendEmail({
           to: contact.email,
-          cc: [team.host.email, team.coHost.email, team.participant.email],
+          replyTo: 'support@maklerplan.com',
           subject: emailService.replaceVariables('Kurzer Austausch zum Jahresstart? | Termin am {{datum}}', { datum: dateStr }),
           body: emailService.replaceVariables(EMAIL_TEMPLATES.neujahr_einladung.body, {
             anrede: `${anrede} ${name}`,
             firma: contact.firma,
             datum: dateStr,
             uhrzeit: timeStr,
-            zoomLink: contact.zoomJoinUrl
+            zoomLink: this.getJoinLink(contact)
           }),
           attachments: [{
             name: `Termin-${dateStr.replace(/[,\s]+/g, '-')}.ics`,
@@ -605,16 +604,15 @@ class CampaignService {
         const icsBase64 = Buffer.from(icsContent, 'utf-8').toString('base64');
         
         // Send to customer + team (CC)
-        const team = CAMPAIGN_CONFIG.team;
         await emailService.sendEmail({
           to: contact.email,
-          cc: [team.host.email, team.coHost.email, team.participant.email],
+          replyTo: 'support@maklerplan.com',
           subject: emailService.replaceVariables('Kurze Erinnerung: Morgen um {{uhrzeit}} Uhr', { uhrzeit: timeStr }),
           body: emailService.replaceVariables(EMAIL_TEMPLATES.neujahr_erinnerung.body, {
             anrede: `${anrede} ${name}`,
             datum: dateStr,
             uhrzeit: timeStr,
-            zoomLink: contact.zoomJoinUrl
+            zoomLink: this.getJoinLink(contact)
           }),
           attachments: [{
             name: `Erinnerung-Termin-${dateStr.replace(/[,\s]+/g, '-')}.ics`,
@@ -646,6 +644,18 @@ class CampaignService {
   // ICS CALENDAR GENERATION
   // ============================================
 
+  getPublicBaseUrl() {
+    const raw = process.env.PUBLIC_BASE_URL || process.env.APP_PUBLIC_URL;
+    if (!raw) return null;
+    return raw.replace(/\/+$/, '');
+  }
+
+  getJoinLink(contact) {
+    const baseUrl = this.getPublicBaseUrl();
+    if (!baseUrl || !contact?.id) return contact?.zoomJoinUrl || '';
+    return `${baseUrl}/api/campaign/join/${contact.id}`;
+  }
+
   generateICS(contact) {
     const slot = contact.scheduledSlot;
     if (!slot) return null;
@@ -653,6 +663,7 @@ class CampaignService {
     const startDate = new Date(slot.startTime);
     const endDate = new Date(slot.endTime);
     const team = CAMPAIGN_CONFIG.team;
+    const joinLink = this.getJoinLink(contact);
 
     // Format dates for ICS (YYYYMMDDTHHMMSSZ)
     const formatICSDate = (date) => {
@@ -681,9 +692,9 @@ class CampaignService {
       `DTSTART:${formatICSDate(startDate)}`,
       `DTEND:${formatICSDate(endDate)}`,
       `SUMMARY:Maklerplan Neujahres-Update 2026 - ${customerName}`,
-      `DESCRIPTION:Zoom Meeting mit ${customerName}\\n\\nZoom Link: ${contact.zoomJoinUrl || 'TBD'}\\n\\nTeilnehmer:\\n- ${team.host.name} (Host)\\n- ${team.coHost.name} (Co-Host)\\n- ${team.participant.name}\\n- ${customerName}`,
+      `DESCRIPTION:Zoom Meeting mit ${customerName}\\n\\nJoin-Link: ${joinLink || 'TBD'}\\n\\nTeilnehmer:\\n- ${team.host.name} (Host)\\n- ${team.coHost.name} (Co-Host)\\n- ${team.participant.name}\\n- ${customerName}`,
       `LOCATION:Zoom Meeting`,
-      `URL:${contact.zoomJoinUrl || ''}`,
+      `URL:${joinLink || ''}`,
       `ORGANIZER;CN=Maklerplan:mailto:${CAMPAIGN_CONFIG.emailFrom}`,
       attendees,
       'STATUS:CONFIRMED',
@@ -1014,6 +1025,226 @@ class CampaignService {
       throw new Error('Contact not found');
     }
     return this.sendNoShowEmail(contact);
+  }
+
+  // =============================================
+  // DATA ENRICHMENT & SEGMENTATION
+  // =============================================
+
+  /**
+   * Calculate priority score for a contact
+   */
+  calculatePriorityScore(contact) {
+    let score = 0;
+    
+    // Reply-based scoring
+    if (contact.replies?.length > 0) score += 30;
+    if (contact.replySentiment === 'positive') score += 20;
+    if (contact.replySentiment === 'negative') score -= 10;
+    if (contact.replyCategory === 'urgent') score += 25;
+    
+    // Timing-based scoring
+    const meetingDate = contact.scheduledSlot?.date;
+    if (meetingDate) {
+      if (meetingDate <= '2026-01-31') score += 15;
+      else if (meetingDate <= '2026-02-28') score += 5;
+      else if (meetingDate > '2026-03-31') score -= 10;
+    }
+    
+    // Data quality scoring
+    if (contact.telefon) score += 10;
+    if (contact.geo?.city) score += 5;
+    if (contact.enrichment?.website) score += 5;
+    if (contact.enrichment?.rating) score += 5;
+    
+    // Engagement scoring
+    if (contact.attendanceStatus === 'attended') score += 20;
+    if (contact.attendanceStatus === 'no_show') score -= 15;
+    
+    return Math.max(0, Math.min(100, score));
+  }
+
+  /**
+   * Determine contact segment
+   */
+  getContactSegment(contact) {
+    const meetingDate = contact.scheduledSlot?.date;
+    
+    if (!meetingDate) return 'no_meeting';
+    if (meetingDate <= '2026-01-31') return 'jan_ok';
+    if (meetingDate <= '2026-02-28') return 'feb_soon';
+    if (meetingDate <= '2026-03-31') return 'march_late';
+    return 'very_late';
+  }
+
+  /**
+   * Sync email replies to contacts
+   */
+  async syncRepliesToContacts(replies) {
+    let updated = 0;
+    
+    for (const reply of replies) {
+      const contactIdx = this.campaign.contacts.findIndex(
+        c => c.email?.toLowerCase() === reply.from?.toLowerCase()
+      );
+      
+      if (contactIdx >= 0) {
+        const contact = this.campaign.contacts[contactIdx];
+        
+        // Initialize replies array
+        if (!contact.replies) contact.replies = [];
+        
+        // Check if reply already exists
+        const exists = contact.replies.some(r => r.id === reply.id);
+        if (!exists) {
+          contact.replies.push({
+            id: reply.id,
+            subject: reply.subject,
+            preview: reply.preview,
+            receivedAt: reply.receivedAt,
+            isRead: reply.isRead
+          });
+          
+          // Update last reply timestamp
+          contact.lastReplyAt = reply.receivedAt;
+          contact.hasReplied = true;
+          updated++;
+        }
+      }
+    }
+    
+    if (updated > 0) {
+      this.saveCampaign();
+      logger.info(`📨 ${updated} Replies zu Kontakten synchronisiert`);
+    }
+    
+    return { updated };
+  }
+
+  /**
+   * Analyze reply sentiment using keywords
+   */
+  analyzeReplySentiment(reply) {
+    const text = `${reply.subject} ${reply.preview}`.toLowerCase();
+    
+    const positiveKeywords = ['zugesagt', 'bestätigt', 'freue', 'gerne', 'danke', 'ja', 'termin passt'];
+    const negativeKeywords = ['absage', 'kündigung', 'keine zeit', 'nicht interessiert', 'abmelden', 'stopp'];
+    const urgentKeywords = ['dringend', 'schnell', 'sofort', 'asap', 'heute', 'anrufen'];
+    const rescheduleKeywords = ['verschieben', 'anderer termin', 'neuer termin', 'passt nicht'];
+    
+    let sentiment = 'neutral';
+    let category = 'other';
+    
+    if (positiveKeywords.some(k => text.includes(k))) sentiment = 'positive';
+    if (negativeKeywords.some(k => text.includes(k))) sentiment = 'negative';
+    if (urgentKeywords.some(k => text.includes(k))) category = 'urgent';
+    else if (rescheduleKeywords.some(k => text.includes(k))) category = 'reschedule';
+    else if (text.includes('?')) category = 'question';
+    
+    return { sentiment, category };
+  }
+
+  /**
+   * Enrich all contacts with segments and scores
+   */
+  async enrichAllContacts() {
+    let enriched = 0;
+    
+    for (const contact of this.campaign.contacts) {
+      // Calculate segment
+      contact.segment = this.getContactSegment(contact);
+      
+      // Analyze replies if present
+      if (contact.replies?.length > 0) {
+        const latestReply = contact.replies[contact.replies.length - 1];
+        const { sentiment, category } = this.analyzeReplySentiment(latestReply);
+        contact.replySentiment = sentiment;
+        contact.replyCategory = category;
+      }
+      
+      // Calculate priority score
+      contact.priorityScore = this.calculatePriorityScore(contact);
+      
+      // Determine priority level
+      if (contact.priorityScore >= 60) contact.priority = 'high';
+      else if (contact.priorityScore >= 30) contact.priority = 'medium';
+      else contact.priority = 'low';
+      
+      enriched++;
+    }
+    
+    this.saveCampaign();
+    logger.info(`✨ ${enriched} Kontakte angereichert`);
+    
+    return { enriched };
+  }
+
+  /**
+   * Get priority call list
+   */
+  getPriorityCallList(options = {}) {
+    const { limit = 50, minScore = 30, segment = null, hasPhone = false } = options;
+    
+    let contacts = this.campaign.contacts
+      .filter(c => c.priorityScore >= minScore)
+      .filter(c => !segment || c.segment === segment)
+      .filter(c => !hasPhone || c.telefon);
+    
+    // Sort by priority score descending
+    contacts.sort((a, b) => (b.priorityScore || 0) - (a.priorityScore || 0));
+    
+    return contacts.slice(0, limit).map(c => ({
+      id: c.id,
+      name: `${c.vorname} ${c.nachname}`.trim() || c.firma,
+      firma: c.firma,
+      email: c.email,
+      telefon: c.telefon,
+      segment: c.segment,
+      priority: c.priority,
+      priorityScore: c.priorityScore,
+      scheduledDate: c.scheduledSlot?.date,
+      hasReplied: c.hasReplied || false,
+      replySentiment: c.replySentiment,
+      replyCategory: c.replyCategory,
+      lastReply: c.replies?.[c.replies.length - 1] || null
+    }));
+  }
+
+  /**
+   * Get contacts needing re-engagement (late meetings)
+   */
+  getReengagementList() {
+    return this.campaign.contacts
+      .filter(c => c.segment === 'march_late' || c.segment === 'very_late')
+      .filter(c => !c.reengagementSentAt)
+      .map(c => ({
+        id: c.id,
+        name: `${c.vorname} ${c.nachname}`.trim() || c.firma,
+        firma: c.firma,
+        email: c.email,
+        segment: c.segment,
+        scheduledDate: c.scheduledSlot?.date,
+        monthName: this.getMonthName(c.scheduledSlot?.date)
+      }));
+  }
+
+  getMonthName(dateStr) {
+    if (!dateStr) return '';
+    const months = ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 
+                    'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'];
+    const month = parseInt(dateStr.split('-')[1]) - 1;
+    return months[month] || '';
+  }
+
+  /**
+   * Mark contact for re-engagement sent
+   */
+  markReengagementSent(contactId) {
+    const idx = this.campaign.contacts.findIndex(c => c.id === contactId);
+    if (idx >= 0) {
+      this.campaign.contacts[idx].reengagementSentAt = new Date().toISOString();
+      this.saveCampaign();
+    }
   }
 }
 

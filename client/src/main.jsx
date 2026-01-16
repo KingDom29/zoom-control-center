@@ -1,10 +1,13 @@
-import React from 'react'
-import ReactDOM from 'react-dom/client'
-import App from './App.jsx'
-import './index.css'
+/**
+ * Zoom Control Center - API Client Only
+ * Frontend UI removed - Backend-only automation system
+ * 
+ * This client exports the API module for external use.
+ * All operations are handled via backend API and WebSocket.
+ */
 
-ReactDOM.createRoot(document.getElementById('root')).render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>,
-)
+// Export API client for programmatic use
+export * from './api/index.js';
+export { default as api } from './api/index.js';
+
+console.log('[ZCC] API Client initialized');

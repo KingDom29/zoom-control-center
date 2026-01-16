@@ -1,6 +1,8 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import compression from 'compression';
+import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import logger from './utils/logger.js';
 import { fileURLToPath } from 'url';
@@ -20,6 +22,16 @@ import meetingTemplatesRouter from './routes/meetingTemplates.js';
 import emailsRouter from './routes/emails.js';
 import campaignRouter from './routes/campaign.js';
 import healthRouter from './routes/health.js';
+import geoRouter from './routes/geo.js';
+import marketRouter from './routes/market.js';
+import sequencesRouter from './routes/sequences.js';
+import revenueRouter from './routes/revenue.js';
+import notificationActionsRouter from './routes/notificationActions.js';
+import logsRouter from './routes/logs.js';
+import navigationRouter from './routes/navigation.js';
+import { performanceMiddleware, getMetrics, getMemoryUsage } from './middleware/performance.js';
+import { cacheMiddleware, getCacheStats } from './middleware/cache.js';
+import revenueEventProcessor from './services/revenueEventProcessor.js';
 import './jobs/campaignScheduler.js';
 import { campaignService } from './services/campaignService.js';
 
@@ -75,12 +87,73 @@ webhookHandler.on('meeting.ended', async (event) => {
   }
 });
 
+// Revenue Event Processor - processes Zoom events into business events
+webhookHandler.on('*', async (event) => {
+  try {
+    const businessEvents = await revenueEventProcessor.processZoomEvent(event);
+    // Broadcast business events via WebSocket
+    businessEvents.forEach(bizEvent => {
+      realtimeServer.broadcast({
+        type: 'revenue_event',
+        data: bizEvent,
+        timestamp: Date.now()
+      });
+    });
+  } catch (error) {
+    logger.error('Error processing revenue event:', { error: error.message });
+  }
+});
+
 // Make realtimeServer and webhookHandler available to routes
 app.locals.realtimeServer = realtimeServer;
 app.locals.webhookHandler = webhookHandler;
 
+// Security & Performance Middleware
+app.use(helmet({
+  contentSecurityPolicy: false, // Disable CSP for API
+  crossOriginEmbedderPolicy: false
+}));
+app.use(compression({
+  filter: (req, res) => {
+    if (req.headers['x-no-compression']) return false;
+    return compression.filter(req, res);
+  },
+  threshold: 1024 // Only compress responses > 1KB
+}));
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
+
+// Request timing middleware
+app.use((req, res, next) => {
+  req.startTime = Date.now();
+  res.on('finish', () => {
+    const duration = Date.now() - req.startTime;
+    if (duration > 1000) {
+      logger.warn(`Slow request: ${req.method} ${req.path} took ${duration}ms`);
+    }
+  });
+  next();
+});
+
+// Cache headers for static API responses
+app.use('/api', (req, res, next) => {
+  if (req.method === 'GET') {
+    res.set('Cache-Control', 'private, max-age=5');
+  }
+  next();
+});
+
+// Performance tracking
+app.use(performanceMiddleware);
+
+// Response caching for GET requests
+app.use(cacheMiddleware);
+
+// Metrics endpoint
+app.get('/api/metrics', getMetrics);
+
+// Cache stats endpoint
+app.get('/api/cache-stats', (req, res) => res.json(getCacheStats()));
 
 // Apply rate limiters
 app.use('/api/', apiLimiter);
@@ -98,9 +171,16 @@ app.use('/api/settings', settingsRouter);
 app.use('/api/dashboard', dashboardRouter);
 app.use('/api/leads', leadsRouter);
 app.use('/api/makler-finder', maklerFinderRouter);
+app.use('/api/geo', geoRouter);
+app.use('/api/market', marketRouter);
 app.use('/api/meeting-templates', meetingTemplatesRouter);
 app.use('/api/emails', emailsRouter);
+app.use('/api/sequences', sequencesRouter);
+app.use('/api/revenue', revenueRouter);
+app.use('/api/notifications', notificationActionsRouter);
 app.use('/api/campaign', campaignRouter);
+app.use('/api/logs', logsRouter);
+app.use('/api/navigation', navigationRouter);
 
 // Enhanced Webhook Routes
 app.post('/api/webhooks', async (req, res) => {
