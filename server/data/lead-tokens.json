@@ -38,5 +38,15 @@
     "leadId": "24956537-45ca-4f47-a002-79db0132e333",
     "action": "optout",
     "createdAt": "2026-01-16T23:34:10.785Z"
+  },
+  "0fe6cee3f47b1926c0812d5145cd8fdd": {
+    "leadId": "d1dd4808-664d-4813-916f-571a24e8d4cb",
+    "action": "info",
+    "createdAt": "2026-01-16T23:44:13.878Z"
+  },
+  "1f9b9542693d62e7d7361df0af0d10b9": {
+    "leadId": "d1dd4808-664d-4813-916f-571a24e8d4cb",
+    "action": "optout",
+    "createdAt": "2026-01-16T23:44:13.878Z"
   }
 }

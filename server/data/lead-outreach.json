@@ -148,13 +148,79 @@
       "clickedActions": [],
       "createdAt": "2026-01-16T23:34:10.784Z",
       "updatedAt": "2026-01-16T23:34:11.132Z"
+    },
+    {
+      "id": "5d526b6a-17b7-4b9e-9471-c1d2274c6050",
+      "leadId": "d1dd4808-664d-4813-916f-571a24e8d4cb",
+      "email": "validierung@example.com",
+      "firma": "Validierung Test GmbH",
+      "city": "",
+      "rating": 4.5,
+      "reviewCount": 67,
+      "status": "converted",
+      "currentStep": 1,
+      "totalSteps": 7,
+      "steps": [
+        {
+          "template": "step1_intro",
+          "day": 0,
+          "scheduledAt": "2026-01-16T23:44:13.877Z",
+          "sentAt": "2026-01-16T23:44:14.409Z"
+        },
+        {
+          "template": "step2_value",
+          "day": 3,
+          "scheduledAt": "2026-01-19T23:44:13.877Z",
+          "sentAt": null
+        },
+        {
+          "template": "step3_social_proof",
+          "day": 7,
+          "scheduledAt": "2026-01-23T23:44:13.877Z",
+          "sentAt": null
+        },
+        {
+          "template": "step4_scarcity",
+          "day": 11,
+          "scheduledAt": "2026-01-27T23:44:13.877Z",
+          "sentAt": null
+        },
+        {
+          "template": "step5_case_study",
+          "day": 16,
+          "scheduledAt": "2026-02-01T23:44:13.877Z",
+          "sentAt": null
+        },
+        {
+          "template": "step6_last_chance",
+          "day": 21,
+          "scheduledAt": "2026-02-06T23:44:13.877Z",
+          "sentAt": null
+        },
+        {
+          "template": "step7_breakup",
+          "day": 28,
+          "scheduledAt": "2026-02-13T23:44:13.877Z",
+          "sentAt": null
+        }
+      ],
+      "clickedActions": [
+        {
+          "action": "call",
+          "at": "2026-01-16T23:44:31.185Z"
+        }
+      ],
+      "createdAt": "2026-01-16T23:44:13.877Z",
+      "updatedAt": "2026-01-16T23:44:31.185Z",
+      "stoppedAt": "2026-01-16T23:44:31.185Z",
+      "stoppedReason": "call_clicked"
     }
   ],
   "optedOut": [],
   "stats": {
-    "sent": 4,
+    "sent": 5,
     "opened": 0,
-    "clicked": 4,
-    "converted": 3
+    "clicked": 5,
+    "converted": 4
   }
 }

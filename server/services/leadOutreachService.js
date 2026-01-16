@@ -220,13 +220,12 @@ const LEAD_TEMPLATES = {
     <a href="{{call_url}}" style="display: inline-block; background: #22c55e; color: white; padding: 14px 28px; text-decoration: none; border-radius: 6px; font-weight: 600; margin: 5px;">
       ✅ Ja, mehr erfahren
     </a>
-    <a href="{{info_url}}" style="display: inline-block; background: #6b7280; color: white; padding: 14px 28px; text-decoration: none; border-radius: 6px; font-weight: 600; margin: 5px;">
-      📄 Case Study zusenden
+    <a href="https://booking.maklerplan.com" style="display: inline-block; background: #667eea; color: white; padding: 14px 28px; text-decoration: none; border-radius: 6px; font-weight: 600; margin: 5px;">
+      📅 Selbst Termin buchen
     </a>
   </div>
   
   <p style="margin: 20px 0 0;">Beste Grüße,<br><strong>Maklerplan-Team</strong></p>
-  <p style="color: #999; font-size: 12px;"><a href="{{optout_url}}" style="color: #999;">Abmelden</a></p>
 </div>
     `.trim()
   },
@@ -254,13 +253,15 @@ const LEAD_TEMPLATES = {
   <p>Da Sie mit {{rating}} Sternen zu den Top-Maklern in {{city}} gehören, möchte ich Ihnen die Chance nicht vorenthalten.</p>
   
   <div style="text-align: center; margin: 30px 0;">
-    <a href="{{call_url}}" style="display: inline-block; background: #f59e0b; color: white; padding: 14px 28px; text-decoration: none; border-radius: 6px; font-weight: 600;">
+    <a href="{{call_url}}" style="display: inline-block; background: #f59e0b; color: white; padding: 14px 28px; text-decoration: none; border-radius: 6px; font-weight: 600; margin: 5px;">
       ⚡ Platz sichern
+    </a>
+    <a href="https://booking.maklerplan.com" style="display: inline-block; background: #667eea; color: white; padding: 14px 28px; text-decoration: none; border-radius: 6px; font-weight: 600; margin: 5px;">
+      📅 Selbst Termin buchen
     </a>
   </div>
   
   <p style="margin: 20px 0 0;">Beste Grüße,<br><strong>Maklerplan-Team</strong></p>
-  <p style="color: #999; font-size: 12px;"><a href="{{optout_url}}" style="color: #999;">Abmelden</a></p>
 </div>
     `.trim()
   },
@@ -288,13 +289,15 @@ const LEAD_TEMPLATES = {
   <p>Möchten Sie erfahren, wie das auch für {{firma}} funktionieren kann?</p>
   
   <div style="text-align: center; margin: 30px 0;">
-    <a href="{{call_url}}" style="display: inline-block; background: #22c55e; color: white; padding: 14px 28px; text-decoration: none; border-radius: 6px; font-weight: 600;">
-      📊 Meine Potenzialanalyse anfordern
+    <a href="{{call_url}}" style="display: inline-block; background: #22c55e; color: white; padding: 14px 28px; text-decoration: none; border-radius: 6px; font-weight: 600; margin: 5px;">
+      📊 Potenzialanalyse anfordern
+    </a>
+    <a href="https://booking.maklerplan.com" style="display: inline-block; background: #667eea; color: white; padding: 14px 28px; text-decoration: none; border-radius: 6px; font-weight: 600; margin: 5px;">
+      📅 Selbst Termin buchen
     </a>
   </div>
   
   <p style="margin: 20px 0 0;">Beste Grüße,<br><strong>Maklerplan-Team</strong></p>
-  <p style="color: #999; font-size: 12px;"><a href="{{optout_url}}" style="color: #999;">Abmelden</a></p>
 </div>
     `.trim()
   },
@@ -341,8 +344,11 @@ const LEAD_TEMPLATES = {
   <p>Falls Sie in Zukunft doch mehr qualifizierte Eigentümer-Leads für {{city}} gewinnen möchten, wissen Sie ja, wo Sie uns finden:</p>
   
   <div style="text-align: center; margin: 30px 0;">
-    <a href="{{call_url}}" style="display: inline-block; background: #6b7280; color: white; padding: 14px 28px; text-decoration: none; border-radius: 6px; font-weight: 600;">
+    <a href="{{call_url}}" style="display: inline-block; background: #22c55e; color: white; padding: 14px 28px; text-decoration: none; border-radius: 6px; font-weight: 600; margin: 5px;">
       📞 Doch noch Kontakt aufnehmen
+    </a>
+    <a href="https://booking.maklerplan.com" style="display: inline-block; background: #667eea; color: white; padding: 14px 28px; text-decoration: none; border-radius: 6px; font-weight: 600; margin: 5px;">
+      📅 Selbst Termin buchen
     </a>
   </div>
   
@@ -384,13 +390,15 @@ const LEAD_TEMPLATES = {
   <p><strong>Nächster Schritt:</strong> In einem kurzen 15-Minuten-Gespräch zeige ich Ihnen, wie viele potenzielle Verkäufer es in Ihrem Gebiet gibt.</p>
   
   <div style="text-align: center; margin: 30px 0;">
-    <a href="{{call_url}}" style="display: inline-block; background: #22c55e; color: white; padding: 14px 28px; text-decoration: none; border-radius: 6px; font-weight: 600;">
-      📞 Kostenloses Gespräch buchen
+    <a href="{{call_url}}" style="display: inline-block; background: #22c55e; color: white; padding: 14px 28px; text-decoration: none; border-radius: 6px; font-weight: 600; margin: 5px;">
+      📞 Rückruf anfordern
+    </a>
+    <a href="https://booking.maklerplan.com" style="display: inline-block; background: #667eea; color: white; padding: 14px 28px; text-decoration: none; border-radius: 6px; font-weight: 600; margin: 5px;">
+      📅 Selbst Termin buchen
     </a>
   </div>
   
   <p style="margin: 20px 0 0;">Beste Grüße,<br><strong>Maklerplan-Team</strong></p>
-  <p style="color: #999; font-size: 12px;"><a href="{{optout_url}}" style="color: #999;">Abmelden</a></p>
 </div>
     `.trim()
   }
