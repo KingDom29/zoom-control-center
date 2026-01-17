@@ -259,6 +259,16 @@ router.get('/addresses', async (req, res) => {
   res.json(addresses);
 });
 
+// Adresse erstellen
+router.post('/addresses', async (req, res) => {
+  try {
+    const result = await twilioService.createAddress(req.body);
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Regulatory Bundles auflisten
 router.get('/bundles', async (req, res) => {
   const bundles = await twilioService.listBundles();

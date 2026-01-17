@@ -716,6 +716,40 @@ class TwilioService {
   }
 
   /**
+   * Adresse erstellen
+   */
+  async createAddress(data) {
+    if (!this.isConfigured()) return { error: 'Not configured' };
+
+    try {
+      const address = await this.client.addresses.create({
+        customerName: data.customerName,
+        friendlyName: data.friendlyName || data.customerName,
+        street: data.street,
+        city: data.city,
+        region: data.region || '',
+        postalCode: data.postalCode,
+        isoCountry: data.isoCountry
+      });
+
+      logger.info('✅ Adresse erstellt', { sid: address.sid, city: address.city });
+
+      return {
+        success: true,
+        sid: address.sid,
+        friendlyName: address.friendlyName,
+        street: address.street,
+        city: address.city,
+        postalCode: address.postalCode,
+        isoCountry: address.isoCountry
+      };
+    } catch (error) {
+      logger.error('Adresse erstellen Fehler', { error: error.message });
+      return { error: error.message };
+    }
+  }
+
+  /**
    * Adressen auflisten
    */
   async listAddresses() {
