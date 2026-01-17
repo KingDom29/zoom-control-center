@@ -1,0 +1,170 @@
+#maklerplan-crm-panel {
+  position: fixed;
+  top: 80px;
+  right: 20px;
+  width: 320px;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.15);
+  z-index: 999999;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  overflow: hidden;
+  transition: all 0.3s ease;
+}
+
+#maklerplan-crm-panel.minimized {
+  width: auto;
+}
+
+#maklerplan-crm-panel.minimized .mp-content {
+  display: none;
+}
+
+#maklerplan-crm-panel.minimized .mp-title {
+  display: none;
+}
+
+.mp-header {
+  background: linear-gradient(135deg, #1a73e8, #0d47a1);
+  color: white;
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.mp-logo {
+  font-size: 18px;
+}
+
+.mp-title {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.mp-badge {
+  background: #ef4444;
+  color: white;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 10px;
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+}
+
+.mp-content {
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.mp-loading, .mp-empty {
+  padding: 30px;
+  text-align: center;
+  color: #64748b;
+}
+
+.mp-empty span {
+  font-size: 32px;
+  display: block;
+  margin-bottom: 8px;
+}
+
+.mp-rec {
+  display: flex;
+  align-items: center;
+  padding: 12px 16px;
+  border-bottom: 1px solid #f1f5f9;
+  gap: 12px;
+}
+
+.mp-rec:hover {
+  background: #f8fafc;
+}
+
+.mp-rec-priority {
+  font-size: 20px;
+}
+
+.mp-rec-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.mp-rec-name {
+  font-weight: 600;
+  font-size: 14px;
+  color: #1e293b;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mp-rec-company {
+  font-size: 12px;
+  color: #64748b;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mp-rec-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.mp-btn {
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.mp-btn:hover {
+  transform: scale(1.1);
+}
+
+.mp-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.mp-btn-call {
+  background: #dcfce7;
+}
+
+.mp-btn-call:hover {
+  background: #bbf7d0;
+}
+
+.mp-btn-email {
+  background: #fef3c7;
+}
+
+.mp-btn-email:hover {
+  background: #fde68a;
+}
+
+.mp-urgent {
+  color: #dc2626;
+}
+
+.mp-high {
+  color: #ea580c;
+}
+
+.mp-medium {
+  color: #ca8a04;
+}
