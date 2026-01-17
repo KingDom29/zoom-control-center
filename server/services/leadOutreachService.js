@@ -113,80 +113,90 @@ const SEQUENCE_CONFIG = {
   durationDays: 28
 };
 
-// E-Mail Templates für Lead-Outreach (7 Stufen)
+// E-Mail Templates für Lead-Outreach (7 Stufen) - KALTAKQUISE
+// Angebot: 18% Tippgeberprovision, Anzahlungen werden verrechnet
 const LEAD_TEMPLATES = {
-  // STUFE 1: Intro (Tag 0)
+  // STUFE 1: Intro (Tag 0) - Neugier wecken
   step1_intro: {
-    subject: '🏠 Mehr Leads für {{firma}} – kostenlose Analyse',
+    subject: 'Verkaufsobjekte für {{firma}}?',
     body: `
 <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #333;">
   <p>{{anrede}},</p>
   
-  <p>ich bin auf <strong>{{firma}}</strong> aufmerksam geworden und beeindruckt von Ihren <strong>{{rating}} Sternen</strong> bei {{reviewCount}} Bewertungen – das spricht für echte Qualität!</p>
+  <p>ich schreibe Ihnen, weil wir regelmäßig <strong>verkaufswillige Eigentümer in {{city}}</strong> haben – und einen zuverlässigen Makler vor Ort suchen.</p>
   
-  <p>Wir bei <strong>Maklerplan</strong> helfen Immobilienmaklern wie Ihnen, <strong>mehr qualifizierte Eigentümer-Leads</strong> zu gewinnen – ohne Kaltakquise, ohne teure Portale.</p>
+  <p>Kurz zu uns: <strong>Maklerplan</strong> vermittelt Verkaufsmandate an ausgewählte Makler. Unser Modell ist einfach:</p>
   
-  <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin: 25px 0;">
-    <p style="margin: 0 0 15px; font-weight: 600;">Das bieten wir:</p>
+  <div style="background: #f0fdf4; padding: 20px; border-radius: 8px; margin: 25px 0; border-left: 4px solid #22c55e;">
+    <p style="margin: 0 0 10px; font-weight: 600;">💰 So verdienen Sie mit uns:</p>
     <ul style="margin: 0; padding-left: 20px;">
-      <li>✅ Exklusive Eigentümer-Leads in Ihrer Region</li>
-      <li>✅ Keine Konkurrenz – nur Sie erhalten den Lead</li>
-      <li>✅ Kostenlose Erstanalyse Ihres Einzugsgebiets</li>
+      <li>Wir liefern Ihnen qualifizierte Eigentümer-Leads</li>
+      <li>Sie zahlen nur eine kleine Anzahlung pro Lead</li>
+      <li><strong>18% Tippgeberprovision</strong> bei erfolgreichem Abschluss</li>
+      <li>Alle Anzahlungen werden verrechnet – kein Risiko</li>
     </ul>
   </div>
   
-  <p><strong>Interesse an einem kurzen Austausch?</strong></p>
+  <p>Haben Sie 10 Minuten für ein kurzes Gespräch?</p>
   
   <div style="text-align: center; margin: 30px 0;">
     <a href="{{call_url}}" style="display: inline-block; background: #22c55e; color: white; padding: 14px 28px; text-decoration: none; border-radius: 6px; font-weight: 600; margin: 5px;">
       ✅ Ja, rufen Sie mich an
     </a>
     <a href="https://booking.maklerplan.com" style="display: inline-block; background: #667eea; color: white; padding: 14px 28px; text-decoration: none; border-radius: 6px; font-weight: 600; margin: 5px;">
-      📅 Selbst Termin buchen
-    </a>
-  </div>
-  
-  <div style="text-align: center; margin: 15px 0;">
-    <a href="{{info_url}}" style="display: inline-block; background: #6b7280; color: white; padding: 10px 20px; text-decoration: none; border-radius: 6px; font-size: 14px; margin: 5px;">
-      📄 Mehr Infos zusenden
+      📅 Termin wählen
     </a>
   </div>
   
   <p style="color: #666; font-size: 14px; text-align: center;">
-    <a href="{{optout_url}}" style="color: #999;">Nicht interessiert? Hier abmelden</a>
+    <a href="{{optout_url}}" style="color: #999;">Kein Interesse</a>
   </p>
 </div>
     `.trim()
   },
 
-  // STUFE 2: Value Proposition (Tag 3)
+  // STUFE 2: Value Proposition (Tag 3) - Modell erklären
   step2_value: {
-    subject: 'RE: {{firma}} – So funktioniert unser Lead-System',
+    subject: 'RE: Wie das Tippgeber-Modell funktioniert',
     body: `
 <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #333;">
   <p>{{anrede}},</p>
   
-  <p>kurze Frage: Wie viel Zeit verbringen Sie aktuell mit der Akquise neuer Objekte?</p>
+  <p>vielleicht fragen Sie sich: <em>Wo ist der Haken?</em></p>
   
-  <p>Unsere Partner-Makler berichten, dass sie durch Maklerplan <strong>durchschnittlich 8-12 Stunden pro Woche</strong> einsparen – Zeit, die sie für Besichtigungen und Abschlüsse nutzen.</p>
+  <p>Es gibt keinen. Unser Geschäftsmodell ist transparent:</p>
   
-  <div style="background: #ecfdf5; padding: 20px; border-radius: 8px; margin: 25px 0; border-left: 4px solid #22c55e;">
-    <p style="margin: 0 0 10px; font-weight: 600;">📊 So funktioniert's:</p>
-    <ol style="margin: 0; padding-left: 20px;">
-      <li>Wir identifizieren verkaufswillige Eigentümer in {{city}}</li>
-      <li>Sie erhalten den Lead <strong>exklusiv</strong> – kein Wettbewerb</li>
-      <li>Sie kontaktieren nur vorqualifizierte Interessenten</li>
-    </ol>
+  <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin: 25px 0;">
+    <table style="width: 100%; border-collapse: collapse;">
+      <tr style="border-bottom: 1px solid #eee;">
+        <td style="padding: 12px 0;"><strong>Sie erhalten:</strong></td>
+        <td style="padding: 12px 0;">Qualifizierte Verkaufsmandate</td>
+      </tr>
+      <tr style="border-bottom: 1px solid #eee;">
+        <td style="padding: 12px 0;"><strong>Sie zahlen:</strong></td>
+        <td style="padding: 12px 0;">Kleine Anzahlung pro Lead</td>
+      </tr>
+      <tr style="border-bottom: 1px solid #eee;">
+        <td style="padding: 12px 0;"><strong>Bei Abschluss:</strong></td>
+        <td style="padding: 12px 0;"><strong style="color: #22c55e;">18% Tippgeberprovision</strong></td>
+      </tr>
+      <tr>
+        <td style="padding: 12px 0;"><strong>Das Beste:</strong></td>
+        <td style="padding: 12px 0;">Anzahlungen werden verrechnet</td>
+      </tr>
+    </table>
   </div>
   
-  <p>Klingt das interessant für Sie?</p>
+  <p>Das bedeutet: Wenn ein Lead zum Abschluss führt, werden alle bisherigen Anzahlungen mit der Provision verrechnet. <strong>Sie zahlen effektiv nur bei Erfolg.</strong></p>
+  
+  <p>Interesse an Details?</p>
   
   <div style="text-align: center; margin: 30px 0;">
     <a href="{{call_url}}" style="display: inline-block; background: #22c55e; color: white; padding: 14px 28px; text-decoration: none; border-radius: 6px; font-weight: 600; margin: 5px;">
       📞 Rückruf anfordern
     </a>
     <a href="https://booking.maklerplan.com" style="display: inline-block; background: #667eea; color: white; padding: 14px 28px; text-decoration: none; border-radius: 6px; font-weight: 600; margin: 5px;">
-      📅 Selbst Termin buchen
+      📅 Termin wählen
     </a>
   </div>
   
@@ -195,33 +205,33 @@ const LEAD_TEMPLATES = {
     `.trim()
   },
 
-  // STUFE 3: Social Proof (Tag 7)
+  // STUFE 3: Social Proof (Tag 7) - Vertrauen aufbauen
   step3_social_proof: {
-    subject: '{{firma}}: Was andere Makler über uns sagen',
+    subject: 'Warum Makler mit uns arbeiten',
     body: `
 <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #333;">
   <p>{{anrede}},</p>
   
-  <p>ich wollte Ihnen zeigen, was andere Makler über die Zusammenarbeit mit uns sagen:</p>
+  <p>wir arbeiten bereits mit über <strong>200 Maklern</strong> in ganz Deutschland zusammen. Hier ist, was sie schätzen:</p>
   
   <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin: 25px 0;">
-    <p style="font-style: italic; margin: 0 0 10px;">"Seit wir mit Maklerplan arbeiten, haben wir 40% mehr Objekte im Portfolio. Die Leads sind hochwertig und exklusiv."</p>
-    <p style="margin: 0; font-weight: 600; color: #666;">– Thomas M., Immobilienmakler aus München</p>
+    <p style="font-style: italic; margin: 0 0 10px;">"Die Leads sind echt – keine Zeitverschwendung. Und das Provisionsmodell ist fair: 18% nur bei Erfolg."</p>
+    <p style="margin: 0; font-weight: 600; color: #666;">– Makler aus München, 3 Abschlüsse in 2 Monaten</p>
   </div>
   
   <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin: 25px 0;">
-    <p style="font-style: italic; margin: 0 0 10px;">"Endlich keine Kaltakquise mehr! Die Eigentümer kommen zu mir."</p>
-    <p style="margin: 0; font-weight: 600; color: #666;">– Sandra K., Maklerin aus Hamburg</p>
+    <p style="font-style: italic; margin: 0 0 10px;">"Endlich ein Modell, bei dem ich nicht in Vorleistung gehe. Die Anzahlungen werden verrechnet – top!"</p>
+    <p style="margin: 0; font-weight: 600; color: #666;">– Maklerin aus Frankfurt</p>
   </div>
   
-  <p>Möchten Sie ähnliche Ergebnisse für {{firma}}?</p>
+  <p>Wollen Sie sehen, wie das für {{city}} aussehen könnte?</p>
   
   <div style="text-align: center; margin: 30px 0;">
     <a href="{{call_url}}" style="display: inline-block; background: #22c55e; color: white; padding: 14px 28px; text-decoration: none; border-radius: 6px; font-weight: 600; margin: 5px;">
-      ✅ Ja, mehr erfahren
+      ✅ Ja, Infos anfordern
     </a>
     <a href="https://booking.maklerplan.com" style="display: inline-block; background: #667eea; color: white; padding: 14px 28px; text-decoration: none; border-radius: 6px; font-weight: 600; margin: 5px;">
-      📅 Selbst Termin buchen
+      📅 Termin wählen
     </a>
   </div>
   
@@ -230,34 +240,39 @@ const LEAD_TEMPLATES = {
     `.trim()
   },
 
-  // STUFE 4: Scarcity (Tag 11)
+  // STUFE 4: Konkretes Angebot (Tag 11)
   step4_scarcity: {
-    subject: '⚡ {{city}}: Nur noch 2 Partner-Plätze frei',
+    subject: 'Konkret: So sieht ein Lead aus',
     body: `
 <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #333;">
   <p>{{anrede}},</p>
   
-  <p>kurzes Update: In <strong>{{city}}</strong> haben wir aktuell nur noch <strong>2 freie Plätze</strong> für neue Partner-Makler.</p>
-  
-  <p>Warum die Begrenzung? Wir garantieren jedem Partner exklusive Leads – ohne Konkurrenz. Deshalb können wir nur eine begrenzte Anzahl Makler pro Region aufnehmen.</p>
+  <p>damit Sie sich etwas vorstellen können – hier ein Beispiel, wie unsere Leads aussehen:</p>
   
   <div style="background: #fef3c7; padding: 20px; border-radius: 8px; margin: 25px 0; border-left: 4px solid #f59e0b;">
-    <p style="margin: 0; font-weight: 600;">🔒 Ihre Vorteile als Partner:</p>
-    <ul style="margin: 10px 0 0; padding-left: 20px;">
-      <li>Exklusivgebiet – keine anderen Makler erhalten Ihre Leads</li>
-      <li>Mindestens 5-10 qualifizierte Leads pro Monat</li>
-      <li>Keine Mindestlaufzeit</li>
+    <p style="margin: 0 0 10px; font-weight: 600;">📍 Beispiel-Lead {{city}}:</p>
+    <ul style="margin: 0; padding-left: 20px;">
+      <li><strong>Objekt:</strong> Einfamilienhaus, 140m²</li>
+      <li><strong>Eigentümer:</strong> Ehepaar, 60+, Verkauf wg. Umzug</li>
+      <li><strong>Zeitrahmen:</strong> Verkauf in 3-6 Monaten gewünscht</li>
+      <li><strong>Kontakt:</strong> Telefonnummer + E-Mail verifiziert</li>
     </ul>
   </div>
   
-  <p>Da Sie mit {{rating}} Sternen zu den Top-Maklern in {{city}} gehören, möchte ich Ihnen die Chance nicht vorenthalten.</p>
+  <div style="background: #f0fdf4; padding: 15px; border-radius: 8px; margin: 25px 0;">
+    <p style="margin: 0;"><strong>Ihre Kosten:</strong> Kleine Anzahlung für den Lead</p>
+    <p style="margin: 5px 0 0;"><strong>Ihr Gewinn bei Abschluss:</strong> Volle Provision abzgl. 18% Tippgeber</p>
+    <p style="margin: 5px 0 0; color: #22c55e;"><strong>→ Anzahlungen werden verrechnet!</strong></p>
+  </div>
+  
+  <p>Haben Sie gerade Kapazität für neue Objekte?</p>
   
   <div style="text-align: center; margin: 30px 0;">
     <a href="{{call_url}}" style="display: inline-block; background: #f59e0b; color: white; padding: 14px 28px; text-decoration: none; border-radius: 6px; font-weight: 600; margin: 5px;">
-      ⚡ Platz sichern
+      ⚡ Ja, Lead-Infos anfordern
     </a>
     <a href="https://booking.maklerplan.com" style="display: inline-block; background: #667eea; color: white; padding: 14px 28px; text-decoration: none; border-radius: 6px; font-weight: 600; margin: 5px;">
-      📅 Selbst Termin buchen
+      📅 Termin wählen
     </a>
   </div>
   
@@ -266,34 +281,36 @@ const LEAD_TEMPLATES = {
     `.trim()
   },
 
-  // STUFE 5: Case Study (Tag 16)
+  // STUFE 5: ROI Rechnung (Tag 16)
   step5_case_study: {
-    subject: 'Fallstudie: Wie ein Makler 12 Objekte in 3 Monaten gewann',
+    subject: 'Rechenbeispiel: Was Sie verdienen können',
     body: `
 <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #333;">
   <p>{{anrede}},</p>
   
-  <p>ich möchte Ihnen eine kurze Erfolgsgeschichte zeigen:</p>
+  <p>lassen Sie mich Ihnen eine einfache Rechnung zeigen:</p>
   
   <div style="background: #f0fdf4; padding: 20px; border-radius: 8px; margin: 25px 0;">
-    <p style="font-weight: 600; margin: 0 0 15px; color: #166534;">📈 Fallstudie: Immobilien Schmidt, Düsseldorf</p>
+    <p style="font-weight: 600; margin: 0 0 15px; color: #166534;">📊 Beispielrechnung:</p>
     <table style="width: 100%;">
-      <tr><td style="padding: 5px 0;"><strong>Vorher:</strong></td><td>2-3 neue Objekte/Monat durch Kaltakquise</td></tr>
-      <tr><td style="padding: 5px 0;"><strong>Nachher:</strong></td><td>8-10 neue Objekte/Monat durch Maklerplan</td></tr>
-      <tr><td style="padding: 5px 0;"><strong>Ergebnis:</strong></td><td>+180% Umsatz in 6 Monaten</td></tr>
+      <tr><td style="padding: 8px 0;"><strong>Verkaufspreis Objekt:</strong></td><td style="text-align: right;">400.000 €</td></tr>
+      <tr><td style="padding: 8px 0;"><strong>Ihre Maklerprovision (3%):</strong></td><td style="text-align: right;">12.000 €</td></tr>
+      <tr><td style="padding: 8px 0;"><strong>Abzgl. 18% Tippgeber:</strong></td><td style="text-align: right;">- 2.160 €</td></tr>
+      <tr style="border-top: 2px solid #22c55e;"><td style="padding: 12px 0;"><strong style="color: #22c55e;">Ihr Gewinn:</strong></td><td style="text-align: right;"><strong style="color: #22c55e; font-size: 18px;">9.840 €</strong></td></tr>
     </table>
+    <p style="margin: 15px 0 0; font-size: 13px; color: #666;">* Alle Anzahlungen werden mit der Provision verrechnet</p>
   </div>
   
-  <p>Das Beste: Herr Schmidt hat <strong>keine einzige Stunde mehr</strong> mit Kaltakquise verbracht.</p>
+  <p>Ohne Akquiseaufwand, ohne Kaltakquise, ohne Portalkosten.</p>
   
-  <p>Möchten Sie erfahren, wie das auch für {{firma}} funktionieren kann?</p>
+  <p>Wollen wir das für Ihre Region durchrechnen?</p>
   
   <div style="text-align: center; margin: 30px 0;">
     <a href="{{call_url}}" style="display: inline-block; background: #22c55e; color: white; padding: 14px 28px; text-decoration: none; border-radius: 6px; font-weight: 600; margin: 5px;">
-      📊 Potenzialanalyse anfordern
+      📊 Meine Rechnung anfordern
     </a>
     <a href="https://booking.maklerplan.com" style="display: inline-block; background: #667eea; color: white; padding: 14px 28px; text-decoration: none; border-radius: 6px; font-weight: 600; margin: 5px;">
-      📅 Selbst Termin buchen
+      📅 Termin wählen
     </a>
   </div>
   
@@ -304,26 +321,26 @@ const LEAD_TEMPLATES = {
 
   // STUFE 6: Last Chance (Tag 21)
   step6_last_chance: {
-    subject: '{{anrede_kurz}}, passt Maklerplan zu {{firma}}?',
+    subject: 'Kurze Frage, {{anrede_kurz}}',
     body: `
 <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #333;">
   <p>{{anrede}},</p>
   
-  <p>ich habe Ihnen in den letzten Wochen einige Informationen geschickt. Vielleicht passt Maklerplan aktuell nicht zu Ihren Plänen – das ist völlig okay.</p>
+  <p>ich habe Ihnen in den letzten Wochen unser Tippgeber-Modell vorgestellt.</p>
   
-  <p>Aber bevor ich aufhöre, Ihnen zu schreiben, eine ehrliche Frage:</p>
+  <p>Vielleicht passt es gerade nicht – das ist völlig okay. Aber bevor ich aufhöre, eine ehrliche Frage:</p>
   
   <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin: 25px 0;">
-    <p style="margin: 0; font-weight: 600;">Was hält Sie davon ab, mehr über unser Angebot zu erfahren?</p>
+    <p style="margin: 0; font-weight: 600;">Was hält Sie davon ab?</p>
   </div>
   
   <div style="margin: 25px 0;">
-    <p style="margin: 10px 0;"><a href="{{call_url}}" style="color: #22c55e; text-decoration: none;">👉 Ich habe einfach keine Zeit – später gerne</a></p>
-    <p style="margin: 10px 0;"><a href="{{info_url}}" style="color: #3b82f6; text-decoration: none;">👉 Ich brauche mehr Infos vor einem Gespräch</a></p>
-    <p style="margin: 10px 0;"><a href="{{optout_url}}" style="color: #999; text-decoration: none;">👉 Kein Interesse – bitte nicht mehr kontaktieren</a></p>
+    <p style="margin: 10px 0;"><a href="{{call_url}}" style="color: #22c55e; text-decoration: none;">👉 Aktuell keine Kapazität – später gerne</a></p>
+    <p style="margin: 10px 0;"><a href="{{info_url}}" style="color: #3b82f6; text-decoration: none;">👉 Brauche mehr Details zum Vertrag</a></p>
+    <p style="margin: 10px 0;"><a href="{{optout_url}}" style="color: #999; text-decoration: none;">👉 Grundsätzlich kein Interesse</a></p>
   </div>
   
-  <p>Ein Klick genügt, dann weiß ich Bescheid.</p>
+  <p>Ein Klick genügt.</p>
   
   <p style="margin: 20px 0 0;">Beste Grüße,<br><strong>Maklerplan-Team</strong></p>
 </div>
@@ -332,27 +349,31 @@ const LEAD_TEMPLATES = {
 
   // STUFE 7: Breakup (Tag 28)
   step7_breakup: {
-    subject: 'Auf Wiedersehen, {{anrede_kurz}}',
+    subject: 'Meine letzte Mail, {{anrede_kurz}}',
     body: `
 <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #333;">
   <p>{{anrede}},</p>
   
   <p>dies ist meine letzte E-Mail an Sie.</p>
   
-  <p>Ich verstehe, dass Maklerplan vielleicht nicht das Richtige für {{firma}} ist – oder dass der Zeitpunkt nicht passt. Das respektiere ich.</p>
+  <p>Ich verstehe, dass unser Tippgeber-Modell vielleicht nicht zu {{firma}} passt – oder der Zeitpunkt gerade ungünstig ist.</p>
   
-  <p>Falls Sie in Zukunft doch mehr qualifizierte Eigentümer-Leads für {{city}} gewinnen möchten, wissen Sie ja, wo Sie uns finden:</p>
+  <p>Falls Sie in Zukunft doch Interesse an <strong>qualifizierten Verkaufsmandaten</strong> haben:</p>
+  
+  <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin: 25px 0; text-align: center;">
+    <p style="margin: 0;"><strong>18% Tippgeberprovision · Anzahlungen werden verrechnet</strong></p>
+  </div>
   
   <div style="text-align: center; margin: 30px 0;">
-    <a href="{{call_url}}" style="display: inline-block; background: #22c55e; color: white; padding: 14px 28px; text-decoration: none; border-radius: 6px; font-weight: 600; margin: 5px;">
+    <a href="{{call_url}}" style="display: inline-block; background: #6b7280; color: white; padding: 14px 28px; text-decoration: none; border-radius: 6px; font-weight: 600; margin: 5px;">
       📞 Doch noch Kontakt aufnehmen
     </a>
     <a href="https://booking.maklerplan.com" style="display: inline-block; background: #667eea; color: white; padding: 14px 28px; text-decoration: none; border-radius: 6px; font-weight: 600; margin: 5px;">
-      📅 Selbst Termin buchen
+      📅 Termin wählen
     </a>
   </div>
   
-  <p>Ansonsten wünsche ich Ihnen weiterhin viel Erfolg mit {{firma}}!</p>
+  <p>Ansonsten wünsche ich Ihnen weiterhin viel Erfolg!</p>
   
   <p style="margin: 20px 0 0;">Alles Gute,<br><strong>Maklerplan-Team</strong></p>
   

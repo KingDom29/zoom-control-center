@@ -214,11 +214,70 @@
       "updatedAt": "2026-01-16T23:44:31.185Z",
       "stoppedAt": "2026-01-16T23:44:31.185Z",
       "stoppedReason": "call_clicked"
+    },
+    {
+      "id": "5003e290-32e2-4b44-9659-887390fff47f",
+      "leadId": "e6c742fe-d819-4ac3-a990-40289b2472cc",
+      "email": "dominik.eisenhardt@gmail.com",
+      "firma": "Test Makler GmbH",
+      "city": "",
+      "rating": 4.9,
+      "reviewCount": 100,
+      "status": "active",
+      "currentStep": 1,
+      "totalSteps": 7,
+      "steps": [
+        {
+          "template": "step1_intro",
+          "day": 0,
+          "scheduledAt": "2026-01-17T00:00:55.485Z",
+          "sentAt": "2026-01-17T00:00:55.870Z"
+        },
+        {
+          "template": "step2_value",
+          "day": 3,
+          "scheduledAt": "2026-01-20T00:00:55.485Z",
+          "sentAt": null
+        },
+        {
+          "template": "step3_social_proof",
+          "day": 7,
+          "scheduledAt": "2026-01-24T00:00:55.485Z",
+          "sentAt": null
+        },
+        {
+          "template": "step4_scarcity",
+          "day": 11,
+          "scheduledAt": "2026-01-28T00:00:55.485Z",
+          "sentAt": null
+        },
+        {
+          "template": "step5_case_study",
+          "day": 16,
+          "scheduledAt": "2026-02-02T00:00:55.485Z",
+          "sentAt": null
+        },
+        {
+          "template": "step6_last_chance",
+          "day": 21,
+          "scheduledAt": "2026-02-07T00:00:55.485Z",
+          "sentAt": null
+        },
+        {
+          "template": "step7_breakup",
+          "day": 28,
+          "scheduledAt": "2026-02-14T00:00:55.485Z",
+          "sentAt": null
+        }
+      ],
+      "clickedActions": [],
+      "createdAt": "2026-01-17T00:00:55.485Z",
+      "updatedAt": "2026-01-17T00:00:55.870Z"
     }
   ],
   "optedOut": [],
   "stats": {
-    "sent": 5,
+    "sent": 6,
     "opened": 0,
     "clicked": 5,
     "converted": 4

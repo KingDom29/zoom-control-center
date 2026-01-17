@@ -48,5 +48,20 @@
     "leadId": "d1dd4808-664d-4813-916f-571a24e8d4cb",
     "action": "optout",
     "createdAt": "2026-01-16T23:44:13.878Z"
+  },
+  "c417e5f017d15d61ee94ae7ceed48529": {
+    "leadId": "e6c742fe-d819-4ac3-a990-40289b2472cc",
+    "action": "call",
+    "createdAt": "2026-01-17T00:00:55.486Z"
+  },
+  "b48ad52ac931f524926710168f2c159e": {
+    "leadId": "e6c742fe-d819-4ac3-a990-40289b2472cc",
+    "action": "info",
+    "createdAt": "2026-01-17T00:00:55.487Z"
+  },
+  "403b8716dd9bfd7643187e4222512d9e": {
+    "leadId": "e6c742fe-d819-4ac3-a990-40289b2472cc",
+    "action": "optout",
+    "createdAt": "2026-01-17T00:00:55.487Z"
   }
 }
