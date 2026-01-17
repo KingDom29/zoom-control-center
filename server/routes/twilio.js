@@ -259,6 +259,27 @@ router.get('/addresses', async (req, res) => {
   res.json(addresses);
 });
 
+// Regulatory Bundles auflisten
+router.get('/bundles', async (req, res) => {
+  const bundles = await twilioService.listBundles();
+  res.json(bundles);
+});
+
+// Nummer mit Bundle kaufen
+router.post('/numbers/purchase-with-bundle', async (req, res) => {
+  try {
+    const { phoneNumber, bundleSid } = req.body;
+    if (!phoneNumber || !bundleSid) {
+      return res.status(400).json({ error: 'phoneNumber and bundleSid required' });
+    }
+    const webhookBaseUrl = process.env.PUBLIC_URL || 'https://zoom-control-center-production.up.railway.app';
+    const result = await twilioService.purchaseNumberWithBundle(phoneNumber, bundleSid, webhookBaseUrl);
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // ============================================
 // SMS
 // ============================================

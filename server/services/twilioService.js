@@ -742,6 +742,64 @@ class TwilioService {
   }
 
   /**
+   * Regulatory Bundles auflisten
+   */
+  async listBundles() {
+    if (!this.isConfigured()) return [];
+
+    try {
+      const bundles = await this.client.numbers.v2.regulatoryCompliance.bundles.list({ limit: 50 });
+      return bundles.map(b => ({
+        sid: b.sid,
+        friendlyName: b.friendlyName,
+        status: b.status,
+        regulationSid: b.regulationSid,
+        isoCountry: b.isoCountry,
+        numberType: b.numberType,
+        validUntil: b.validUntil,
+        dateCreated: b.dateCreated
+      }));
+    } catch (error) {
+      logger.error('Bundles Fehler', { error: error.message });
+      return { error: error.message };
+    }
+  }
+
+  /**
+   * Nummer mit Bundle kaufen (für DE/CH)
+   */
+  async purchaseNumberWithBundle(phoneNumber, bundleSid, webhookBaseUrl) {
+    if (!this.isConfigured()) return { error: 'Not configured' };
+
+    try {
+      const purchased = await this.client.incomingPhoneNumbers.create({
+        phoneNumber: phoneNumber,
+        bundleSid: bundleSid,
+        voiceUrl: `${webhookBaseUrl}/api/twilio/voice/incoming`,
+        voiceMethod: 'POST',
+        voiceFallbackUrl: `${webhookBaseUrl}/api/twilio/voice/fallback`,
+        statusCallback: `${webhookBaseUrl}/api/twilio/voice/status`,
+        smsUrl: `${webhookBaseUrl}/api/twilio/incoming-sms`,
+        smsMethod: 'POST',
+        friendlyName: 'Maklerplan CRM'
+      });
+
+      logger.info('✅ Neue Nummer mit Bundle gekauft', { phoneNumber: purchased.phoneNumber });
+
+      return {
+        success: true,
+        sid: purchased.sid,
+        phoneNumber: purchased.phoneNumber,
+        friendlyName: purchased.friendlyName,
+        capabilities: purchased.capabilities
+      };
+    } catch (error) {
+      logger.error('Nummernkauf mit Bundle Fehler', { error: error.message });
+      return { error: error.message };
+    }
+  }
+
+  /**
    * Nummer mit Adresse kaufen
    */
   async purchaseNumberWithAddress(phoneNumber, addressSid, webhookBaseUrl) {
