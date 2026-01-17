@@ -2,6 +2,7 @@ import cron from 'node-cron';
 import { campaignService } from '../services/campaignService.js';
 import { sequenceEngine } from '../services/sequenceEngine.js';
 import { teamActivityService } from '../services/teamActivityService.js';
+import { meetingQualityService } from '../services/meetingQualityService.js';
 import logger from '../utils/logger.js';
 
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
@@ -582,6 +583,78 @@ const weeklyTeamReportJob = cron.schedule('0 17 * * 5', async () => {
 }, { timezone: 'Europe/Berlin' });
 logger.info('📊 Weekly Team Report Job: Freitags 17:00 Uhr');
 
+// ============================================
+// PRODUCTIVITY & NO-SHOW CHECKS
+// ============================================
+
+// No-Show Check - Alle 2 Stunden während Arbeitszeit
+async function runNoShowCheck() {
+  logger.info('⚠️ Starte No-Show Check...');
+  try {
+    const result = await meetingQualityService.checkNoShows();
+    if (result.noShows.length > 0) {
+      logger.warn(`⚠️ ${result.noShows.length} No-Shows gefunden`);
+      // Alerts für jeden No-Show senden
+      for (const noShow of result.noShows) {
+        await meetingQualityService.sendNoShowAlert(noShow);
+      }
+    } else {
+      logger.info('✅ Keine No-Shows gefunden');
+    }
+    return result;
+  } catch (error) {
+    logger.error('No-Show Check Fehler', { error: error.message });
+    throw error;
+  }
+}
+
+const noShowCheckJob = cron.schedule('0 10,12,14,16 * * 1-5', async () => {
+  await runNoShowCheck();
+}, { timezone: 'Europe/Berlin' });
+logger.info('⚠️ No-Show Check Job: Werktags 10, 12, 14, 16 Uhr');
+
+// Produktivitäts-Report - Täglich um 17:30 Uhr
+async function runProductivityReport() {
+  logger.info('📊 Starte Produktivitäts-Report...');
+  try {
+    const result = await meetingQualityService.sendProductivityReport();
+    logger.info('✅ Produktivitäts-Report gesendet', { 
+      active: result.activity.summary.active,
+      inactive: result.activity.summary.inactive
+    });
+    return result;
+  } catch (error) {
+    logger.error('Produktivitäts-Report Fehler', { error: error.message });
+    throw error;
+  }
+}
+
+const productivityReportJob = cron.schedule('30 17 * * 1-5', async () => {
+  await runProductivityReport();
+}, { timezone: 'Europe/Berlin' });
+logger.info('📊 Productivity Report Job: Werktags 17:30 Uhr');
+
+// Inaktivitäts-Reminder - Täglich um 14:00 Uhr (gibt Zeit für Nachmittags-Meetings)
+async function runInactivityReminders() {
+  logger.info('📧 Starte Inaktivitäts-Reminder...');
+  try {
+    const result = await meetingQualityService.sendAllInactivityReminders();
+    logger.info('✅ Inaktivitäts-Reminder gesendet', { 
+      sent: result.remindersSent,
+      total: result.totalInactive
+    });
+    return result;
+  } catch (error) {
+    logger.error('Inaktivitäts-Reminder Fehler', { error: error.message });
+    throw error;
+  }
+}
+
+const inactivityReminderJob = cron.schedule('0 14 * * 1-5', async () => {
+  await runInactivityReminders();
+}, { timezone: 'Europe/Berlin' });
+logger.info('📧 Inactivity Reminder Job: Werktags 14:00 Uhr');
+
 // Export für manuelle Ausführung und Status-Check
 export { 
   runCampaignBatch, campaignJob, 
@@ -596,5 +669,8 @@ export {
   runMultiLeadSequences, multiLeadJob,
   runLeadquelleGeneration, leadquelleGenerationJob,
   runStartupCatchup,
-  runTeamReport, dailyTeamReportJob, weeklyTeamReportJob
+  runTeamReport, dailyTeamReportJob, weeklyTeamReportJob,
+  runNoShowCheck, noShowCheckJob,
+  runProductivityReport, productivityReportJob,
+  runInactivityReminders, inactivityReminderJob
 };

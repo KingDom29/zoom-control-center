@@ -30,6 +30,7 @@ import multiLeadsRouter from './routes/multiLeads.js';
 import schedulerRouter from './routes/scheduler.js';
 import leadquelleDashboardRouter from './routes/leadquelleDashboard.js';
 import summariesRouter from './routes/summaries.js';
+import productivityDashboardRouter from './routes/productivityDashboard.js';
 import { meetingSummaryService } from './services/meetingSummaryService.js';
 import { performanceMiddleware, getMetrics, getMemoryUsage } from './middleware/performance.js';
 import { cacheMiddleware, getCacheStats } from './middleware/cache.js';
@@ -183,6 +184,7 @@ app.use('/api/multi-leads', multiLeadsRouter);
 app.use('/api/scheduler', schedulerRouter);
 app.use('/leadquelle', leadquelleDashboardRouter);
 app.use('/api/summaries', summariesRouter);
+app.use('/productivity', productivityDashboardRouter);
 
 // Enhanced Webhook Routes
 app.post('/api/webhooks', async (req, res) => {

@@ -1,9 +1,70 @@
 import express from 'express';
 import { zoomApi } from '../services/zoomAuth.js';
 import { teamActivityService } from '../services/teamActivityService.js';
+import { meetingQualityService } from '../services/meetingQualityService.js';
 import logger from '../utils/logger.js';
 
 const router = express.Router();
+
+// ============================================
+// MEETING QUALITY & PRODUCTIVITY
+// ============================================
+
+// Meeting-Qualitäts-Score für User
+router.get('/:userId/quality', async (req, res) => {
+  try {
+    const { from, to } = req.query;
+    const result = await meetingQualityService.getUserMeetingsWithScore(req.params.userId, from, to);
+    res.json(result);
+  } catch (error) {
+    logger.error('Quality Score Fehler', { error: error.message });
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// No-Show Check
+router.get('/team/no-shows', async (req, res) => {
+  try {
+    const result = await meetingQualityService.checkNoShows();
+    res.json(result);
+  } catch (error) {
+    logger.error('No-Show Check Fehler', { error: error.message });
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Inaktive User abrufen
+router.get('/team/inactive', async (req, res) => {
+  try {
+    const result = await meetingQualityService.getInactiveUsers();
+    res.json(result);
+  } catch (error) {
+    logger.error('Inactive Users Fehler', { error: error.message });
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Produktivitäts-Report senden
+router.post('/team/productivity/send', async (req, res) => {
+  try {
+    const result = await meetingQualityService.sendProductivityReport();
+    res.json(result);
+  } catch (error) {
+    logger.error('Productivity Report Fehler', { error: error.message });
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Reminder an alle inaktiven User senden
+router.post('/team/reminders/send', async (req, res) => {
+  try {
+    const result = await meetingQualityService.sendAllInactivityReminders();
+    res.json(result);
+  } catch (error) {
+    logger.error('Reminders Fehler', { error: error.message });
+    res.status(500).json({ error: error.message });
+  }
+});
 
 // ============================================
 // TEAM MANAGEMENT ROUTES
