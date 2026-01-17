@@ -396,6 +396,39 @@ const leadOutreachJob = cron.schedule('0 9-18 * * 1-5', runLeadOutreach, {
 logger.info('📬 Lead-Outreach geplant: Stündlich 9-18 Uhr Mo-Fr (LEAD_OUTREACH_ENABLED=true)');
 
 // =============================================
+// HOT LEAD DETECTOR - Alle 15 Minuten Inbox scannen
+// =============================================
+
+async function runHotLeadScan() {
+  try {
+    const { hotLeadDetector } = await import('../services/hotLeadDetector.js');
+    
+    const result = await hotLeadDetector.scanAndNotify({
+      minScore: 50,
+      notifyEmail: 'support@maklerplan.com',
+      createMeeting: true
+    });
+    
+    if (result.notified.length > 0) {
+      logger.info(`🔥 Hot Lead Detector: ${result.notified.length} Leads benachrichtigt`);
+    } else if (result.scanned.hotLeads > 0) {
+      logger.info(`🔥 Hot Lead Detector: ${result.scanned.hotLeads} Hot Leads gefunden (Score < 50)`);
+    }
+    
+  } catch (error) {
+    logger.error('Hot Lead Detector Fehler', { error: error.message });
+  }
+}
+
+// Alle 15 Minuten (8-19 Uhr)
+const hotLeadJob = cron.schedule('*/15 8-19 * * *', runHotLeadScan, {
+  timezone: 'Europe/Berlin',
+  scheduled: true
+});
+
+logger.info('🔥 Hot Lead Detector geplant: Alle 15 Min 8-19 Uhr');
+
+// =============================================
 // STARTUP CATCH-UP - Verpasste Tasks nachholen
 // =============================================
 
@@ -467,5 +500,6 @@ export {
   dailyReportJob,
   runHealthCheck, healthCheckJob,
   runLeadOutreach, leadOutreachJob,
+  runHotLeadScan, hotLeadJob,
   runStartupCatchup
 };
