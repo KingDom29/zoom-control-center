@@ -447,13 +447,44 @@ async function runMultiLeadSequences() {
   }
 }
 
-// Täglich um 10:00 und 15:00 Uhr (Werktags)
+// Täglich um 10:00 und 15:00 Uhr (Werktags) - Follow-ups
 const multiLeadJob = cron.schedule('0 10,15 * * 1-5', runMultiLeadSequences, {
   timezone: 'Europe/Berlin',
   scheduled: true
 });
 
 logger.info('📧 Leadquelle Sequenzen geplant: 10:00 + 15:00 Uhr Mo-Fr');
+
+// =============================================
+// LEADQUELLE AUTO-GENERATION - Google Places Suche
+// =============================================
+
+async function runLeadquelleGeneration() {
+  try {
+    const { multiLeadService } = await import('../services/multiLeadService.js');
+    
+    // Automatisch 5 neue Leads suchen und anschreiben
+    const result = await multiLeadService.runLeadGeneration({
+      maxLeads: 5,
+      sendEmail: true
+    });
+    
+    if (result.imported > 0) {
+      logger.info(`🔍 Leadquelle: ${result.branchName} in ${result.city} - ${result.imported} Leads, ${result.emailed} E-Mails`);
+    }
+    
+  } catch (error) {
+    logger.error('Leadquelle Generation Fehler', { error: error.message });
+  }
+}
+
+// Alle 2 Stunden (9-17 Uhr Werktags) neue Leads suchen
+const leadquelleGenerationJob = cron.schedule('0 9,11,13,15,17 * * 1-5', runLeadquelleGeneration, {
+  timezone: 'Europe/Berlin',
+  scheduled: true
+});
+
+logger.info('🔍 Leadquelle Auto-Generation geplant: 9/11/13/15/17 Uhr Mo-Fr (5 Leads/Durchlauf)');
 
 // =============================================
 // STARTUP CATCH-UP - Verpasste Tasks nachholen
@@ -529,5 +560,6 @@ export {
   runLeadOutreach, leadOutreachJob,
   runHotLeadScan, hotLeadJob,
   runMultiLeadSequences, multiLeadJob,
+  runLeadquelleGeneration, leadquelleGenerationJob,
   runStartupCatchup
 };

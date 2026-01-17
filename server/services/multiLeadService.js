@@ -762,6 +762,112 @@ class MultiLeadService {
     return leads;
   }
 
+  // =============================================
+  // AUTOMATISCHE LEAD-GENERIERUNG
+  // =============================================
+
+  // Städte für Lead-Suche (Top 20 deutsche Städte)
+  getCities() {
+    return [
+      'Berlin', 'Hamburg', 'München', 'Köln', 'Frankfurt am Main',
+      'Stuttgart', 'Düsseldorf', 'Leipzig', 'Dortmund', 'Essen',
+      'Bremen', 'Dresden', 'Hannover', 'Nürnberg', 'Duisburg',
+      'Bochum', 'Wuppertal', 'Bielefeld', 'Bonn', 'Münster'
+    ];
+  }
+
+  // Komplette Lead-Generierung (Suchen + Importieren + E-Mail senden)
+  async runLeadGeneration(options = {}) {
+    const { 
+      branch = null, // null = random branch
+      city = null,   // null = random city
+      maxLeads = 5,  // Max Leads pro Durchlauf
+      sendEmail = true 
+    } = options;
+
+    // Zufällige Branche wenn nicht angegeben
+    const branchIds = Object.keys(BRANCHES);
+    const selectedBranch = branch || branchIds[Math.floor(Math.random() * branchIds.length)];
+    const branchConfig = BRANCHES[selectedBranch];
+
+    // Zufällige Stadt wenn nicht angegeben
+    const cities = this.getCities();
+    const selectedCity = city || cities[Math.floor(Math.random() * cities.length)];
+
+    logger.info(`🔍 Leadquelle: Suche ${branchConfig.name} in ${selectedCity}...`);
+
+    const results = { searched: 0, imported: 0, emailed: 0, errors: [] };
+
+    try {
+      // 1. Leads suchen
+      const searchResults = await this.searchLeads(selectedBranch, selectedCity);
+      results.searched = searchResults.length;
+
+      // 2. Top Leads importieren (mit E-Mail)
+      let imported = 0;
+      for (const item of searchResults) {
+        if (imported >= maxLeads) break;
+
+        try {
+          // Details abrufen
+          const details = await this.getPlaceDetails(item.placeId);
+          if (!details || details.status !== 'OPERATIONAL') continue;
+
+          // E-Mail scrapen
+          let email = null;
+          if (details.website) {
+            email = await this.scrapeEmail(details.website);
+          }
+
+          // Nur mit E-Mail importieren
+          if (!email) continue;
+
+          // Lead speichern
+          const saveResult = this.saveLead({
+            ...details,
+            branch: selectedBranch,
+            city: selectedCity,
+            email
+          });
+
+          if (!saveResult.success) continue;
+
+          imported++;
+          results.imported++;
+
+          // 3. Erste E-Mail senden
+          if (sendEmail) {
+            try {
+              await this.sendSequenceEmail(saveResult.lead.id, 'step1_intro');
+              results.emailed++;
+              logger.info(`📧 Leadquelle: ${details.company} angeschrieben`);
+            } catch (emailError) {
+              results.errors.push({ company: details.company, error: emailError.message });
+            }
+          }
+
+          await this.sleep(1000); // Rate limiting
+
+        } catch (error) {
+          results.errors.push({ placeId: item.placeId, error: error.message });
+        }
+      }
+
+      logger.info(`✅ Leadquelle: ${results.imported} Leads importiert, ${results.emailed} E-Mails gesendet`);
+
+    } catch (error) {
+      logger.error('Leadquelle Generation Fehler', { error: error.message });
+      results.errors.push({ error: error.message });
+    }
+
+    return {
+      branch: selectedBranch,
+      branchName: branchConfig.name,
+      city: selectedCity,
+      ...results
+    };
+  }
+
   // Helpers
   deduplicateByPlaceId(results) {
     const seen = new Set();
