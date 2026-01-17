@@ -11,13 +11,25 @@ const CLOSE_API_KEY = process.env.CLOSE_API_KEY;
 
 // Close Custom Field IDs (aus deinem Close Account)
 const CUSTOM_FIELDS = {
-  // Makler Fields
+  // Makler Identifikation
   MAKLER_ID: 'cf_Y2d1QZkiAdxUc6lLXFQ9jvyIs9BMTTYY4x6FNbmedA0',
   BEXIO_ID: 'cf_AVokd0aJG9U6fi2gG5R7LgPo0lrVqnNPJ8zWzWHJTky',
   PARTNER_ABO: 'cf_bax6RWceG5MyONSmL8MVomYKkGFY7WTsuFrDcgEs89q',
   KONTINGENT: 'cf_gmYQtuaxs9PnnaabG3BawLNBaiT0HLEiG3ZW952U83U',
   UMKREIS: 'cf_o2DnvZkQyAIagRUTUxS5WUxmZofuVS6E5fsKNBJ4DZ1',
   VERMITTELTE_LEADS: 'cf_K8poQgxjji1IekYd3ZcIPsyjTIpMVlRnvXGAQuT64Vi',
+  
+  // Renew Intelligence (NEU)
+  RENEW_BETRUGS_SCORE: 'cf_MpjSuek6IbnrGjlMltypxDE4kT98F6zBieD59ejd6Mf',
+  RENEW_BEREITSCHAFT: 'cf_5JiGXhI8bO8HxXekbCERkoQRvbwUZphMwcU6lrvX8DC',
+  RENEW_VERTRAUENSSTUFE: 'cf_Yy2wFvkYWn3vDUoPvSrwzft6mtRvNgO97aEOOZOYNsE',
+  RENEW_LETZTE_PRUEFUNG: 'cf_SIu2WlfIyAjvyjhxHfBRsUTYw9pXRenFz8xlnIznNcv',
+  RENEW_ZAHLUNGSSTATUS: 'cf_gIvH5clzYYdqEJWa3ipbRnsphZYJLg4x9Qmh6c4xvCt',
+  
+  // Performance Tracking (NEU)
+  LEADS_VERKAUFT: 'cf_uMpL9Q0WcXSvvWYCZdzRSALrsXfQQBQjE5JgtwBpop8',
+  LEADS_VERLOREN: 'cf_wv4HVS6Bjv2izlGXEdYTnTuEbKgi6EcPBJEChZ81IJk',
+  ERFOLGSQUOTE: 'cf_s6KziX2G6jVThS0ILD5QoI31PhF7av8n8BXAliso4rj',
   
   // Eigentümer/Immobilien Fields
   PLZ_IMMOBILIE: 'cf_3AfXiLIZpt0X0VbPwcVlhGATwLfRoXV4f9ZIgEDN2y0',
