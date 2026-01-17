@@ -442,6 +442,42 @@ router.get('/sequences', async (req, res) => {
   }
 });
 
+router.put('/sequences/:id', async (req, res) => {
+  try {
+    const result = await closeService.updateSequence(req.params.id, req.body);
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/sequences', async (req, res) => {
+  try {
+    const result = await closeService.createSequence(req.body);
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.get('/smart-views', async (req, res) => {
+  try {
+    const views = await closeService.getSmartViews();
+    res.json(views);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/smart-views', async (req, res) => {
+  try {
+    const result = await closeService.createSmartView(req.body);
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 router.get('/phone-numbers', async (req, res) => {
   try {
     const phones = await closeService.getPhoneNumbers();

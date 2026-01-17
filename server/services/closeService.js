@@ -246,6 +246,22 @@ class CloseService {
     return this.request('GET', '/sequence/');
   }
 
+  async updateSequence(sequenceId, data) {
+    return this.request('PUT', `/sequence/${sequenceId}/`, data);
+  }
+
+  async createSequence(data) {
+    return this.request('POST', '/sequence/', data);
+  }
+
+  async createSmartView(data) {
+    return this.request('POST', '/saved_search/', data);
+  }
+
+  async updateSmartView(viewId, data) {
+    return this.request('PUT', `/saved_search/${viewId}/`, data);
+  }
+
   async getConnectedAccounts() {
     return this.request('GET', '/connected_account/');
   }
