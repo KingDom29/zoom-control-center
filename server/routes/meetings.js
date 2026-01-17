@@ -1,59 +1,60 @@
+/**
+ * Zoom Meetings API Routes
+ * Direkte Zoom Meeting-Verwaltung
+ */
+
 import express from 'express';
 import { zoomApi } from '../services/zoomAuth.js';
 import logger from '../utils/logger.js';
 
 const router = express.Router();
 
-// Get all meetings for all users
+// Helper: Meetings für alle User abrufen
+async function getAllUserMeetings(type = 'scheduled', pageSize = 100) {
+  const users = await zoomApi('GET', '/users?page_size=300');
+  const allMeetings = [];
+  
+  for (const user of users.users || []) {
+    try {
+      const meetings = await zoomApi('GET', `/users/${user.id}/meetings?type=${type}&page_size=${pageSize}`);
+      allMeetings.push(...(meetings.meetings || []).map(m => ({
+        ...m,
+        host_email: user.email,
+        host_name: `${user.first_name} ${user.last_name}`.trim()
+      })));
+    } catch (e) {
+      // User hat keine Meetings oder kein Zugriff
+    }
+  }
+  
+  return allMeetings;
+}
+
+// GET / - Alle Meetings
 router.get('/', async (req, res) => {
   try {
-    const { type = 'scheduled', page_size = 30 } = req.query;
-    const users = await zoomApi('GET', '/users?page_size=300');
-    
-    const allMeetings = [];
-    for (const user of users.users || []) {
-      try {
-        const meetings = await zoomApi('GET', `/users/${user.id}/meetings?type=${type}&page_size=${page_size}`);
-        allMeetings.push(...(meetings.meetings || []).map(m => ({ ...m, host_email: user.email, host_name: `${user.first_name} ${user.last_name}` })));
-      } catch (e) {
-        logger.warn(`Could not fetch meetings for ${user.email}`);
-      }
-    }
-    
-    res.json({ meetings: allMeetings, total_records: allMeetings.length });
+    const { type = 'scheduled' } = req.query;
+    const meetings = await getAllUserMeetings(type);
+    res.json({ meetings, total_records: meetings.length });
   } catch (error) {
     logger.error('Get meetings error', { error: error.message });
     res.status(500).json({ error: error.message });
   }
 });
 
-// Get upcoming meetings
+// GET /upcoming - Kommende Meetings (sortiert)
 router.get('/upcoming', async (req, res) => {
   try {
-    const users = await zoomApi('GET', '/users?page_size=300');
-    const allMeetings = [];
-    
-    for (const user of users.users || []) {
-      try {
-        const meetings = await zoomApi('GET', `/users/${user.id}/meetings?type=upcoming&page_size=100`);
-        allMeetings.push(...(meetings.meetings || []).map(m => ({ 
-          ...m, 
-          host_email: user.email, 
-          host_name: `${user.first_name} ${user.last_name}` 
-        })));
-      } catch (e) {}
-    }
-    
-    // Sort by start time
-    allMeetings.sort((a, b) => new Date(a.start_time) - new Date(b.start_time));
-    res.json({ meetings: allMeetings });
+    const meetings = await getAllUserMeetings('upcoming');
+    meetings.sort((a, b) => new Date(a.start_time) - new Date(b.start_time));
+    res.json({ meetings, total_records: meetings.length });
   } catch (error) {
     logger.error('Get upcoming meetings error', { error: error.message });
     res.status(500).json({ error: error.message });
   }
 });
 
-// Get live meetings
+// GET /live - Aktuell laufende Meetings
 router.get('/live', async (req, res) => {
   try {
     const metrics = await zoomApi('GET', '/metrics/meetings?type=live&page_size=100');
@@ -64,7 +65,7 @@ router.get('/live', async (req, res) => {
   }
 });
 
-// Get meeting details
+// GET /:meetingId - Meeting Details
 router.get('/:meetingId', async (req, res) => {
   try {
     const meeting = await zoomApi('GET', `/meetings/${req.params.meetingId}`);
@@ -75,7 +76,7 @@ router.get('/:meetingId', async (req, res) => {
   }
 });
 
-// Create a new meeting
+// POST / - Neues Meeting erstellen
 router.post('/', async (req, res) => {
   try {
     const { userId = 'me', ...meetingData } = req.body;
@@ -87,7 +88,7 @@ router.post('/', async (req, res) => {
   }
 });
 
-// Update a meeting
+// PATCH /:meetingId - Meeting aktualisieren
 router.patch('/:meetingId', async (req, res) => {
   try {
     await zoomApi('PATCH', `/meetings/${req.params.meetingId}`, req.body);
@@ -98,7 +99,7 @@ router.patch('/:meetingId', async (req, res) => {
   }
 });
 
-// Delete a meeting
+// DELETE /:meetingId - Meeting löschen
 router.delete('/:meetingId', async (req, res) => {
   try {
     await zoomApi('DELETE', `/meetings/${req.params.meetingId}`);
@@ -109,7 +110,7 @@ router.delete('/:meetingId', async (req, res) => {
   }
 });
 
-// End a meeting
+// PUT /:meetingId/status - Meeting beenden
 router.put('/:meetingId/status', async (req, res) => {
   try {
     await zoomApi('PUT', `/meetings/${req.params.meetingId}/status`, { action: 'end' });
@@ -120,7 +121,7 @@ router.put('/:meetingId/status', async (req, res) => {
   }
 });
 
-// Get meeting participants
+// GET /:meetingId/participants - Teilnehmer abrufen
 router.get('/:meetingId/participants', async (req, res) => {
   try {
     const participants = await zoomApi('GET', `/past_meetings/${req.params.meetingId}/participants`);
@@ -131,7 +132,7 @@ router.get('/:meetingId/participants', async (req, res) => {
   }
 });
 
-// Get meeting registrants
+// GET /:meetingId/registrants - Registrierungen abrufen
 router.get('/:meetingId/registrants', async (req, res) => {
   try {
     const registrants = await zoomApi('GET', `/meetings/${req.params.meetingId}/registrants`);
