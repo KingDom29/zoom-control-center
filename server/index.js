@@ -20,7 +20,7 @@ import leadsRouter from './routes/leads.js';
 import maklerFinderRouter from './routes/maklerFinder.js';
 import meetingTemplatesRouter from './routes/meetingTemplates.js';
 import emailsRouter from './routes/emails.js';
-import campaignRouter from './routes/campaign.js';
+import campaignRouter from './routes/campaign/index.js';
 import healthRouter from './routes/health.js';
 import geoRouter from './routes/geo.js';
 import marketRouter from './routes/market.js';
