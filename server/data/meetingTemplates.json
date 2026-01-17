@@ -1,23 +1,51 @@
 {
   "templates": [
     {
-      "id": "neujahr_update",
-      "name": "Neujahres-Update 2026",
-      "description": "Standard-Template für Kampagne",
+      "id": "lead_erstgespraech",
+      "name": "Lead-Erstgespräch",
+      "description": "Erstkontakt mit Makler aus Kaltakquise",
+      "settings": {
+        "duration": 15,
+        "waitingRoom": false,
+        "autoRecording": "cloud",
+        "muteOnEntry": false,
+        "hostVideo": true,
+        "participantVideo": true
+      },
+      "agenda": "1. Kurze Vorstellung (2 Min)\n2. Wie läuft Ihre Akquise aktuell? (3 Min)\n3. Unser Tippgeber-Modell: 18% bei Erfolg (5 Min)\n4. Ihre Fragen + nächste Schritte (5 Min)"
+    },
+    {
+      "id": "lead_vertragserklaerung",
+      "name": "Vertragsdetails",
+      "description": "Detaillierte Vertragserklärung für interessierte Makler",
       "settings": {
         "duration": 30,
         "waitingRoom": true,
         "autoRecording": "cloud",
-        "muteOnEntry": true,
+        "muteOnEntry": false,
         "hostVideo": true,
         "participantVideo": true
       },
-      "agenda": "1. Begrüßung (5 Min)\n2. Rückblick 2025 (5 Min)\n3. Ausblick 2026 (10 Min)\n4. Ihre Fragen (10 Min)"
+      "agenda": "1. Begrüßung (2 Min)\n2. Vertrag im Detail durchgehen (15 Min)\n3. 18% Provision & Anzahlungen erklärt (8 Min)\n4. Fragen & Abschluss (5 Min)"
+    },
+    {
+      "id": "lead_onboarding",
+      "name": "Partner-Onboarding",
+      "description": "Neuen Partner-Makler einrichten",
+      "settings": {
+        "duration": 30,
+        "waitingRoom": true,
+        "autoRecording": "cloud",
+        "muteOnEntry": false,
+        "hostVideo": true,
+        "participantVideo": true
+      },
+      "agenda": "1. Willkommen als Partner (3 Min)\n2. So erhalten Sie Leads (10 Min)\n3. Abrechnung & Provision (10 Min)\n4. Fragen & Support-Kontakt (7 Min)"
     },
     {
       "id": "support_call",
       "name": "Support-Call",
-      "description": "Kurzer Support-Termin",
+      "description": "Kurzer Support-Termin für Partner",
       "settings": {
         "duration": 15,
         "waitingRoom": false,
@@ -29,46 +57,18 @@
       "agenda": "Support-Anfrage bearbeiten"
     },
     {
-      "id": "schulung",
-      "name": "Produkt-Schulung",
-      "description": "Ausführliche Schulung",
+      "id": "lead_nachfassen",
+      "name": "Lead-Nachfassen",
+      "description": "Follow-up mit unentschlossenem Makler",
       "settings": {
-        "duration": 60,
-        "waitingRoom": true,
-        "autoRecording": "cloud",
-        "muteOnEntry": true,
-        "hostVideo": true,
-        "participantVideo": false
-      },
-      "agenda": "1. Einführung (10 Min)\n2. Feature-Demo (30 Min)\n3. Hands-On (15 Min)\n4. Q&A (5 Min)"
-    },
-    {
-      "id": "erstgespraech",
-      "name": "Erstgespräch Neukunde",
-      "description": "Kennenlernen mit potenziellem Kunden",
-      "settings": {
-        "duration": 45,
-        "waitingRoom": true,
-        "autoRecording": "cloud",
-        "muteOnEntry": false,
-        "hostVideo": true,
-        "participantVideo": true
-      },
-      "agenda": "1. Vorstellung (10 Min)\n2. Bedarfsanalyse (15 Min)\n3. Produkt-Überblick (15 Min)\n4. Nächste Schritte (5 Min)"
-    },
-    {
-      "id": "team_weekly",
-      "name": "Team Weekly",
-      "description": "Wöchentliches Team-Meeting",
-      "settings": {
-        "duration": 30,
+        "duration": 10,
         "waitingRoom": false,
         "autoRecording": "none",
         "muteOnEntry": false,
         "hostVideo": true,
         "participantVideo": true
       },
-      "agenda": "1. Status-Updates\n2. Blocker\n3. Planung nächste Woche"
+      "agenda": "1. Kurzes Check-in (2 Min)\n2. Offene Fragen klären (5 Min)\n3. Entscheidung oder nächster Schritt (3 Min)"
     }
   ]
 }
