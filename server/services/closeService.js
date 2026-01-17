@@ -622,6 +622,84 @@ class CloseService {
       message: 'Lead erfolgreich zugewiesen (Fraud-Check bestanden)'
     };
   }
+
+  // ============================================
+  // CUSTOM FIELD MANAGEMENT
+  // ============================================
+
+  async getCustomFields() {
+    const result = await this.request('GET', '/custom_field/lead/');
+    return result?.data || [];
+  }
+
+  async createCustomField(fieldData) {
+    return this.request('POST', '/custom_field/lead/', fieldData);
+  }
+
+  async deleteCustomField(fieldId) {
+    return this.request('DELETE', `/custom_field/lead/${fieldId}/`);
+  }
+
+  async deleteAllCustomFields() {
+    const fields = await this.getCustomFields();
+    const results = [];
+    
+    for (const field of fields) {
+      try {
+        await this.deleteCustomField(field.id);
+        results.push({ id: field.id, name: field.name, deleted: true });
+        logger.info(`Custom Field gelöscht: ${field.name}`);
+      } catch (error) {
+        results.push({ id: field.id, name: field.name, deleted: false, error: error.message });
+      }
+    }
+    
+    return results;
+  }
+
+  async setupRenewCustomFields() {
+    const renewFields = [
+      // Makler Identifikation
+      { name: 'Bexio-Nr', type: 'text', description: 'Master Key für Zendesk Renew' },
+      { name: 'Bexio Kontakt-ID', type: 'text' },
+      
+      // Abo & Kontingent
+      { name: 'Partner-Abo', type: 'choices', choices: ['Starter', 'Professional', 'Enterprise', 'Inaktiv'] },
+      { name: 'Lead-Kontingent', type: 'number' },
+      { name: 'Umkreis (km)', type: 'number' },
+      { name: 'Vermittelte Leads', type: 'number' },
+      
+      // Renew Intelligence
+      { name: 'Renew Fraud Score', type: 'number', description: '0-100, höher = mehr Risiko' },
+      { name: 'Renew Readiness', type: 'number', description: '0-1 Readiness Score' },
+      { name: 'Renew Trust Level', type: 'choices', choices: ['verified', 'standard', 'suspicious', 'blocked'] },
+      { name: 'Renew Last Check', type: 'date' },
+      { name: 'Renew Billing Status', type: 'choices', choices: ['paid', 'pending', 'overdue', 'blocked'] },
+      
+      // Performance Tracking
+      { name: 'Childs Sold', type: 'number' },
+      { name: 'Childs Lost', type: 'number' },
+      { name: 'Conversion Rate', type: 'number', description: 'Erfolgsquote in %' },
+      
+      // Eigentümer/Immobilien
+      { name: 'PLZ Immobilie', type: 'text' },
+      { name: 'Zugewiesener Makler', type: 'text', description: 'Lead-ID des Maklers' },
+      { name: 'Zuweisung Datum', type: 'date' }
+    ];
+
+    const created = [];
+    for (const field of renewFields) {
+      try {
+        const result = await this.createCustomField(field);
+        created.push({ name: field.name, id: result.id, success: true });
+        logger.info(`Custom Field erstellt: ${field.name} → ${result.id}`);
+      } catch (error) {
+        created.push({ name: field.name, success: false, error: error.message });
+      }
+    }
+
+    return created;
+  }
 }
 
 export const closeService = new CloseService();

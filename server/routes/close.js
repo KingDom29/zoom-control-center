@@ -341,4 +341,56 @@ router.post('/assign-lead', async (req, res) => {
   }
 });
 
+// ============================================
+// CUSTOM FIELD MANAGEMENT
+// ============================================
+
+router.get('/custom-fields', async (req, res) => {
+  try {
+    const fields = await closeService.getCustomFields();
+    res.json({ 
+      count: fields.length,
+      fields: fields.map(f => ({ id: f.id, name: f.name, type: f.type }))
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.delete('/custom-fields/:id', async (req, res) => {
+  try {
+    await closeService.deleteCustomField(req.params.id);
+    res.json({ success: true, deleted: req.params.id });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.delete('/custom-fields', async (req, res) => {
+  try {
+    const { confirm } = req.body;
+    if (confirm !== 'DELETE_ALL_FIELDS') {
+      return res.status(400).json({ error: 'Bestätigung erforderlich: confirm = "DELETE_ALL_FIELDS"' });
+    }
+    const results = await closeService.deleteAllCustomFields();
+    res.json({ success: true, results });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/custom-fields/setup-renew', async (req, res) => {
+  try {
+    const results = await closeService.setupRenewCustomFields();
+    res.json({ 
+      success: true, 
+      created: results.filter(r => r.success).length,
+      failed: results.filter(r => !r.success).length,
+      results 
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 export default router;
