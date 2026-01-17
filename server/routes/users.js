@@ -35,13 +35,8 @@ router.get('/team/no-shows', async (req, res) => {
 
 // Inaktive User abrufen
 router.get('/team/inactive', async (req, res) => {
-  try {
-    const result = await meetingQualityService.getInactiveUsers();
-    res.json(result);
-  } catch (error) {
-    logger.error('Inactive Users Fehler', { error: error.message });
-    res.status(500).json({ error: error.message });
-  }
+  const result = await meetingQualityService.getInactiveUsers();
+  res.json(result);
 });
 
 // Produktivitäts-Report senden
