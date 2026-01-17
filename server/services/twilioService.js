@@ -766,13 +766,13 @@ class TwilioService {
   }
 
   /**
-   * Nummer mit Bundle kaufen (für DE/CH)
+   * Nummer mit Bundle UND Adresse kaufen (für DE/CH)
    */
-  async purchaseNumberWithBundle(phoneNumber, bundleSid, webhookBaseUrl) {
+  async purchaseNumberWithBundle(phoneNumber, bundleSid, addressSid, webhookBaseUrl) {
     if (!this.isConfigured()) return { error: 'Not configured' };
 
     try {
-      const purchased = await this.client.incomingPhoneNumbers.create({
+      const params = {
         phoneNumber: phoneNumber,
         bundleSid: bundleSid,
         voiceUrl: `${webhookBaseUrl}/api/twilio/voice/incoming`,
@@ -782,7 +782,13 @@ class TwilioService {
         smsUrl: `${webhookBaseUrl}/api/twilio/incoming-sms`,
         smsMethod: 'POST',
         friendlyName: 'Maklerplan CRM'
-      });
+      };
+
+      if (addressSid) {
+        params.addressSid = addressSid;
+      }
+
+      const purchased = await this.client.incomingPhoneNumbers.create(params);
 
       logger.info('✅ Neue Nummer mit Bundle gekauft', { phoneNumber: purchased.phoneNumber });
 
