@@ -16,7 +16,7 @@ import recordingsRouter from './routes/recordings.js';
 import reportsRouter from './routes/reports.js';
 import settingsRouter from './routes/settings.js';
 import dashboardRouter from './routes/dashboard.js';
-import leadsRouter from './routes/leads.js';
+import leadsRouter from './routes/leads/index.js';
 import maklerFinderRouter from './routes/maklerFinder.js';
 import meetingTemplatesRouter from './routes/meetingTemplates.js';
 import emailsRouter from './routes/emails.js';
