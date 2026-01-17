@@ -659,32 +659,17 @@ class CloseService {
 
   async setupRenewCustomFields() {
     const renewFields = [
-      // Makler Identifikation
-      { name: 'Bexio-Nr', type: 'text', description: 'Master Key für Zendesk Renew' },
-      { name: 'Bexio Kontakt-ID', type: 'text' },
+      // Renew Intelligence (NEU)
+      { name: 'Renew Betrugs-Score', type: 'number', description: '0-100, hoeher = mehr Risiko' },
+      { name: 'Renew Bereitschaft', type: 'number', description: '0-1 Readiness Score' },
+      { name: 'Renew Vertrauensstufe', type: 'choices', choices: ['verifiziert', 'standard', 'verdaechtig', 'gesperrt'] },
+      { name: 'Renew Letzte Pruefung', type: 'date' },
+      { name: 'Renew Zahlungsstatus', type: 'choices', choices: ['bezahlt', 'ausstehend', 'ueberfaellig', 'gesperrt'] },
       
-      // Abo & Kontingent
-      { name: 'Partner-Abo', type: 'choices', choices: ['Starter', 'Professional', 'Enterprise', 'Inaktiv'] },
-      { name: 'Lead-Kontingent', type: 'number' },
-      { name: 'Umkreis (km)', type: 'number' },
-      { name: 'Vermittelte Leads', type: 'number' },
-      
-      // Renew Intelligence
-      { name: 'Renew Fraud Score', type: 'number', description: '0-100, höher = mehr Risiko' },
-      { name: 'Renew Readiness', type: 'number', description: '0-1 Readiness Score' },
-      { name: 'Renew Trust Level', type: 'choices', choices: ['verified', 'standard', 'suspicious', 'blocked'] },
-      { name: 'Renew Last Check', type: 'date' },
-      { name: 'Renew Billing Status', type: 'choices', choices: ['paid', 'pending', 'overdue', 'blocked'] },
-      
-      // Performance Tracking
-      { name: 'Childs Sold', type: 'number' },
-      { name: 'Childs Lost', type: 'number' },
-      { name: 'Conversion Rate', type: 'number', description: 'Erfolgsquote in %' },
-      
-      // Eigentümer/Immobilien
-      { name: 'PLZ Immobilie', type: 'text' },
-      { name: 'Zugewiesener Makler', type: 'text', description: 'Lead-ID des Maklers' },
-      { name: 'Zuweisung Datum', type: 'date' }
+      // Performance Tracking (NEU)
+      { name: 'Leads Verkauft', type: 'number', description: 'Anzahl verkaufter Childs' },
+      { name: 'Leads Verloren', type: 'number', description: 'Anzahl verlorener Childs' },
+      { name: 'Erfolgsquote Prozent', type: 'number', description: 'Conversion Rate in %' }
     ];
 
     const created = [];
