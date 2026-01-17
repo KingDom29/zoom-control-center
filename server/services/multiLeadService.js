@@ -294,7 +294,7 @@ const SEQUENCE_TEMPLATES = {
   <li>❌ Preiskampf mit der Konkurrenz</li>
   <li>❌ Keine Zeit für Marketing</li>
 </ul>
-<p>In meiner <strong>kostenlosen 20-Min Analyse</strong> zeige ich Ihnen konkret, wie andere ${branch.name} diese Probleme gelöst haben.</p>
+<p>Mit <strong>KI-gestützter Lead-Generierung</strong> zeige ich Ihnen konkret, wie andere ${branch.name} diese Probleme gelöst haben.</p>
 {{cta_button}}
 <p>Haben Sie 20 Minuten Zeit diese Woche?</p>
     `
@@ -380,7 +380,7 @@ function getEmailTemplate(branchId, lead, step = 'step1_intro') {
   
   <p>Beste Grüße,<br>
   <strong>Dominik Eisenhardt</strong><br>
-  Leadquelle Deutschland</p>
+  Leadquelle AI – Mehr Kunden. Ganz sicher.</p>
   
   <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
   
