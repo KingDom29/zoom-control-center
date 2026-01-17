@@ -208,6 +208,46 @@ router.post('/voice/transcription', (req, res) => {
 });
 
 // ============================================
+// NUMMERN KAUFEN
+// ============================================
+
+// Alle eigenen Nummern
+router.get('/numbers', async (req, res) => {
+  const numbers = await twilioService.listOwnedNumbers();
+  res.json(numbers);
+});
+
+// Verfügbare Nummern suchen
+router.get('/numbers/search', async (req, res) => {
+  try {
+    const { country = 'DE', type, sms, limit } = req.query;
+    const result = await twilioService.searchAvailableNumbers(country, {
+      type,
+      smsRequired: sms === 'true',
+      limit: parseInt(limit) || 10
+    });
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Nummer kaufen
+router.post('/numbers/purchase', async (req, res) => {
+  try {
+    const { phoneNumber } = req.body;
+    if (!phoneNumber) {
+      return res.status(400).json({ error: 'phoneNumber required' });
+    }
+    const webhookBaseUrl = process.env.PUBLIC_URL || 'https://zoom-control-center-production.up.railway.app';
+    const result = await twilioService.purchaseNumber(phoneNumber, webhookBaseUrl);
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================
 // SMS
 // ============================================
 

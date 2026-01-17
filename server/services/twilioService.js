@@ -613,6 +613,107 @@ class TwilioService {
       return [];
     }
   }
+
+  /**
+   * Verfügbare Nummern suchen
+   */
+  async searchAvailableNumbers(country = 'DE', options = {}) {
+    if (!this.isConfigured()) return { error: 'Not configured' };
+
+    try {
+      const searchParams = {
+        voiceEnabled: true,
+        smsEnabled: options.smsRequired || false,
+        limit: options.limit || 10
+      };
+
+      // Nach Typ suchen
+      let numbers;
+      if (options.type === 'mobile') {
+        numbers = await this.client.availablePhoneNumbers(country).mobile.list(searchParams);
+      } else if (options.type === 'tollFree') {
+        numbers = await this.client.availablePhoneNumbers(country).tollFree.list(searchParams);
+      } else {
+        numbers = await this.client.availablePhoneNumbers(country).local.list(searchParams);
+      }
+
+      return {
+        country,
+        count: numbers.length,
+        numbers: numbers.map(n => ({
+          phoneNumber: n.phoneNumber,
+          friendlyName: n.friendlyName,
+          locality: n.locality,
+          region: n.region,
+          capabilities: n.capabilities,
+          monthlyPrice: n.monthlyPrice || 'N/A'
+        }))
+      };
+    } catch (error) {
+      logger.error('Nummernsuche Fehler', { country, error: error.message });
+      return { error: error.message };
+    }
+  }
+
+  /**
+   * Neue Nummer kaufen und sofort konfigurieren
+   */
+  async purchaseNumber(phoneNumber, webhookBaseUrl) {
+    if (!this.isConfigured()) return { error: 'Not configured' };
+
+    try {
+      const purchased = await this.client.incomingPhoneNumbers.create({
+        phoneNumber: phoneNumber,
+        voiceUrl: `${webhookBaseUrl}/api/twilio/voice/incoming`,
+        voiceMethod: 'POST',
+        voiceFallbackUrl: `${webhookBaseUrl}/api/twilio/voice/fallback`,
+        statusCallback: `${webhookBaseUrl}/api/twilio/voice/status`,
+        smsUrl: `${webhookBaseUrl}/api/twilio/incoming-sms`,
+        smsMethod: 'POST',
+        friendlyName: 'Maklerplan CRM'
+      });
+
+      logger.info('✅ Neue Nummer gekauft', { phoneNumber: purchased.phoneNumber });
+
+      return {
+        success: true,
+        sid: purchased.sid,
+        phoneNumber: purchased.phoneNumber,
+        friendlyName: purchased.friendlyName,
+        voiceUrl: purchased.voiceUrl,
+        smsUrl: purchased.smsUrl,
+        capabilities: purchased.capabilities,
+        dateCreated: purchased.dateCreated
+      };
+    } catch (error) {
+      logger.error('Nummernkauf Fehler', { phoneNumber, error: error.message });
+      return { error: error.message };
+    }
+  }
+
+  /**
+   * Alle eigenen Nummern auflisten
+   */
+  async listOwnedNumbers() {
+    if (!this.isConfigured()) return [];
+
+    try {
+      const numbers = await this.client.incomingPhoneNumbers.list({ limit: 50 });
+      return numbers.map(n => ({
+        sid: n.sid,
+        phoneNumber: n.phoneNumber,
+        friendlyName: n.friendlyName,
+        capabilities: n.capabilities,
+        voiceUrl: n.voiceUrl,
+        smsUrl: n.smsUrl,
+        trunkSid: n.trunkSid,
+        dateCreated: n.dateCreated
+      }));
+    } catch (error) {
+      logger.error('Nummern auflisten Fehler', { error: error.message });
+      return [];
+    }
+  }
 }
 
 export const twilioService = new TwilioService();
