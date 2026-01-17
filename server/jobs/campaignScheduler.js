@@ -429,6 +429,33 @@ const hotLeadJob = cron.schedule('*/15 8-19 * * *', runHotLeadScan, {
 logger.info('🔥 Hot Lead Detector geplant: Alle 15 Min 8-19 Uhr');
 
 // =============================================
+// MULTI-LEAD SEQUENZEN (Leadquelle) - Täglich Follow-ups
+// =============================================
+
+async function runMultiLeadSequences() {
+  try {
+    const { multiLeadService } = await import('../services/multiLeadService.js');
+    
+    const result = await multiLeadService.processSequences();
+    
+    if (result.processed > 0) {
+      logger.info(`📧 Leadquelle: ${result.processed} Follow-up E-Mails gesendet`);
+    }
+    
+  } catch (error) {
+    logger.error('Multi-Lead Sequenz Fehler', { error: error.message });
+  }
+}
+
+// Täglich um 10:00 und 15:00 Uhr (Werktags)
+const multiLeadJob = cron.schedule('0 10,15 * * 1-5', runMultiLeadSequences, {
+  timezone: 'Europe/Berlin',
+  scheduled: true
+});
+
+logger.info('📧 Leadquelle Sequenzen geplant: 10:00 + 15:00 Uhr Mo-Fr');
+
+// =============================================
 // STARTUP CATCH-UP - Verpasste Tasks nachholen
 // =============================================
 
@@ -501,5 +528,6 @@ export {
   runHealthCheck, healthCheckJob,
   runLeadOutreach, leadOutreachJob,
   runHotLeadScan, hotLeadJob,
+  runMultiLeadSequences, multiLeadJob,
   runStartupCatchup
 };

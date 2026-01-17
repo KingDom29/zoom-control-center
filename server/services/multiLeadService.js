@@ -257,44 +257,126 @@ const BRANCHES = {
 };
 
 // =============================================
+// E-MAIL SEQUENZ TEMPLATES (5 Follow-ups)
+// =============================================
+
+const SEQUENCE_TEMPLATES = {
+  step1_intro: {
+    delay: 0, // Sofort
+    subject: (branch, lead) => `${branch.emoji} Kostenlose 20-Min Analyse für ${lead.company}`,
+    body: (branch, lead, anrede) => `
+<p>${anrede},</p>
+<p>ich habe mir <strong>${lead.company}</strong> angeschaut und sehe großes Potenzial für mehr Kunden und Umsatz.</p>
+<p>Als Spezialist für <strong>${branch.name}</strong> kenne ich die typischen Herausforderungen:</p>
+<ul style="color: #666;">
+  ${branch.painPoints.map(p => `<li>${p}</li>`).join('\n  ')}
+</ul>
+<p><strong>Mein Angebot:</strong> Eine kostenlose 20-Minuten Analyse, in der ich Ihnen zeige:</p>
+<ul>
+  <li>✅ Wo Sie aktuell Kunden verlieren</li>
+  <li>✅ Wie Ihre Konkurrenz es besser macht</li>
+  <li>✅ 3 sofort umsetzbare Tipps für mehr Anfragen</li>
+</ul>
+{{cta_button}}
+<p>Kein Risiko, keine Verpflichtung – nur echte Insights für Ihr Geschäft.</p>
+    `
+  },
+  
+  step2_value: {
+    delay: 3, // Nach 3 Tagen
+    subject: (branch, lead) => `${branch.emoji} Kurze Frage zu ${lead.company}`,
+    body: (branch, lead, anrede) => `
+<p>${anrede},</p>
+<p>ich wollte kurz nachfragen, ob Sie meine letzte Nachricht erhalten haben?</p>
+<p>Viele ${branch.name} kämpfen mit:</p>
+<ul>
+  <li>❌ Zu wenig Anfragen trotz guter Arbeit</li>
+  <li>❌ Preiskampf mit der Konkurrenz</li>
+  <li>❌ Keine Zeit für Marketing</li>
+</ul>
+<p>In meiner <strong>kostenlosen 20-Min Analyse</strong> zeige ich Ihnen konkret, wie andere ${branch.name} diese Probleme gelöst haben.</p>
+{{cta_button}}
+<p>Haben Sie 20 Minuten Zeit diese Woche?</p>
+    `
+  },
+  
+  step3_social_proof: {
+    delay: 5, // Nach 5 Tagen (8 total)
+    subject: (branch, lead) => `So gewinnen andere ${branch.name} mehr Kunden`,
+    body: (branch, lead, anrede) => `
+<p>${anrede},</p>
+<p>letzte Woche habe ich mit einem ${branch.name.slice(0, -1)} aus München gesprochen. Sein Problem: Zu viel Arbeit, aber kaum neue Anfragen online.</p>
+<p><strong>Nach unserem Gespräch:</strong></p>
+<ul>
+  <li>✅ 3 Quick-Wins sofort umgesetzt</li>
+  <li>✅ Erste neue Anfrage nach 2 Wochen</li>
+  <li>✅ Heute: 40% mehr Online-Anfragen</li>
+</ul>
+<p>Ich zeige Ihnen gerne, was auch für <strong>${lead.company}</strong> möglich wäre.</p>
+{{cta_button}}
+    `
+  },
+  
+  step4_urgency: {
+    delay: 4, // Nach 4 Tagen (12 total)
+    subject: (branch, lead) => `⏰ Diese Woche noch Zeit, ${lead.company.split(' ')[0]}?`,
+    body: (branch, lead, anrede) => `
+<p>${anrede},</p>
+<p>ich habe diese Woche noch <strong>2 freie Termine</strong> für Analyse-Gespräche.</p>
+<p>In 20 Minuten erfahren Sie:</p>
+<ul>
+  <li>🎯 Warum Ihre Konkurrenz mehr Anfragen bekommt</li>
+  <li>🎯 3 Fehler, die 90% der ${branch.name} machen</li>
+  <li>🎯 Einen konkreten Aktionsplan für mehr Kunden</li>
+</ul>
+{{cta_button}}
+<p>Komplett kostenlos. Kein Haken.</p>
+    `
+  },
+  
+  step5_breakup: {
+    delay: 7, // Nach 7 Tagen (19 total)
+    subject: (branch, lead) => `Letzte Nachricht von mir, ${lead.company.split(' ')[0]}`,
+    body: (branch, lead, anrede) => `
+<p>${anrede},</p>
+<p>ich möchte Sie nicht weiter belästigen, daher ist dies meine letzte Nachricht.</p>
+<p>Falls Sie doch noch Interesse an der <strong>kostenlosen Analyse</strong> haben, können Sie jederzeit einen Termin buchen:</p>
+{{cta_button}}
+<p>Ich wünsche Ihnen und <strong>${lead.company}</strong> weiterhin viel Erfolg!</p>
+<p>Vielleicht ergibt sich ja in Zukunft eine Gelegenheit.</p>
+    `
+  }
+};
+
+// =============================================
 // E-MAIL TEMPLATE (Dynamisch pro Branche)
 // =============================================
 
-function getEmailTemplate(branch, lead) {
-  const branchConfig = BRANCHES[branch];
+function getEmailTemplate(branchId, lead, step = 'step1_intro') {
+  const branchConfig = BRANCHES[branchId];
   if (!branchConfig) return null;
+
+  const template = SEQUENCE_TEMPLATES[step];
+  if (!template) return null;
 
   const anrede = lead.contactName ? `Guten Tag ${lead.contactName.split(' ')[0]}` : 'Guten Tag';
   
-  return {
-    subject: `${branchConfig.emoji} Kostenlose 20-Min Analyse für ${lead.company}`,
-    body: `
-<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-  <p>${anrede},</p>
-  
-  <p>ich habe mir <strong>${lead.company}</strong> angeschaut und sehe großes Potenzial für mehr Kunden und Umsatz.</p>
-  
-  <p>Als Spezialist für <strong>${branchConfig.name}</strong> kenne ich die typischen Herausforderungen:</p>
-  
-  <ul style="color: #666;">
-    ${branchConfig.painPoints.map(p => `<li>${p}</li>`).join('\n    ')}
-  </ul>
-  
-  <p><strong>Mein Angebot:</strong> Eine kostenlose 20-Minuten Analyse, in der ich Ihnen zeige:</p>
-  
-  <ul>
-    <li>✅ Wo Sie aktuell Kunden verlieren</li>
-    <li>✅ Wie Ihre Konkurrenz es besser macht</li>
-    <li>✅ 3 sofort umsetzbare Tipps für mehr Anfragen</li>
-  </ul>
-  
+  const ctaButton = `
   <div style="text-align: center; margin: 30px 0;">
     <a href="{{booking_url}}" style="background: #2563eb; color: white; padding: 15px 30px; text-decoration: none; border-radius: 8px; font-weight: bold; display: inline-block;">
       📅 Jetzt Gratis-Termin buchen
     </a>
-  </div>
+  </div>`;
+
+  const bodyContent = template.body(branchConfig, lead, anrede).replace('{{cta_button}}', ctaButton);
   
-  <p>Kein Risiko, keine Verpflichtung – nur echte Insights für Ihr Geschäft.</p>
+  return {
+    step,
+    delay: template.delay,
+    subject: template.subject(branchConfig, lead),
+    body: `
+<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+  ${bodyContent}
   
   <p>Beste Grüße,<br>
   <strong>Dominik Eisenhardt</strong><br>
@@ -314,6 +396,15 @@ function getEmailTemplate(branch, lead) {
   };
 }
 
+// Sequenz-Steps
+const SEQUENCE_STEPS = ['step1_intro', 'step2_value', 'step3_social_proof', 'step4_urgency', 'step5_breakup'];
+
+function getNextStep(currentStep) {
+  const idx = SEQUENCE_STEPS.indexOf(currentStep);
+  if (idx === -1 || idx >= SEQUENCE_STEPS.length - 1) return null;
+  return SEQUENCE_STEPS[idx + 1];
+}
+
 // =============================================
 // SERVICE CLASS
 // =============================================
@@ -321,8 +412,8 @@ function getEmailTemplate(branch, lead) {
 class MultiLeadService {
   constructor() {
     this.apiKey = process.env.GOOGLE_PLACES_API_KEY;
-    // Zoom Scheduler für Terminbuchung
-    this.bookingUrl = process.env.MULTI_BOOKING_URL || 'https://scheduler.zoom.us/leadquelle/analyse';
+    // Zoom Meeting Registrierung für Terminbuchung
+    this.bookingUrl = process.env.MULTI_BOOKING_URL || 'https://us06web.zoom.us/meeting/register/X7XllnKaSKSJ9ACdf_Wvvg';
     this.fromEmail = process.env.LEADQUELLE_EMAIL || 'de@leadquelle.ai';
     this.minRating = 3.5; // Niedrigere Schwelle für breitere Zielgruppe
     this.initData();
@@ -528,6 +619,82 @@ class MultiLeadService {
 
     logger.info(`📧 Multi-Lead E-Mail gesendet: ${lead.company} (${lead.branch})`);
     return { success: true, lead };
+  }
+
+  // Sequenz E-Mail senden (für Follow-ups)
+  async sendSequenceEmail(leadId, step) {
+    const data = JSON.parse(fs.readFileSync(MULTI_LEADS_PATH, 'utf-8'));
+    const lead = data.leads.find(l => l.id === leadId);
+    
+    if (!lead) throw new Error('Lead nicht gefunden');
+    if (!lead.email) throw new Error('Keine E-Mail-Adresse');
+    if (lead.status === 'booked' || lead.status === 'opted_out') return { skipped: true, reason: lead.status };
+
+    const template = getEmailTemplate(lead.branch, lead, step);
+    if (!template) throw new Error('Template nicht gefunden');
+
+    const bookingToken = this.generateToken(leadId, 'booking');
+    const optoutToken = this.generateToken(leadId, 'optout');
+
+    const baseUrl = process.env.PUBLIC_URL || 'http://localhost:3001';
+    const body = template.body
+      .replace('{{booking_url}}', `${baseUrl}/api/multi-leads/track/${bookingToken}?redirect=${encodeURIComponent(this.bookingUrl)}`)
+      .replace('{{optout_url}}', `${baseUrl}/api/multi-leads/optout/${optoutToken}`);
+
+    await emailService.sendEmail({
+      to: lead.email,
+      subject: template.subject,
+      body: body,
+      from: this.fromEmail
+    });
+
+    // Sequenz-Status aktualisieren
+    lead.currentStep = step;
+    lead.lastEmailAt = new Date().toISOString();
+    lead.emailCount = (lead.emailCount || 0) + 1;
+    
+    fs.writeFileSync(MULTI_LEADS_PATH, JSON.stringify(data, null, 2));
+
+    logger.info(`📧 Sequenz ${step}: ${lead.company} (${lead.branch})`);
+    return { success: true, step, lead };
+  }
+
+  // Follow-ups verarbeiten (für Cron-Job)
+  async processSequences() {
+    const data = JSON.parse(fs.readFileSync(MULTI_LEADS_PATH, 'utf-8'));
+    const now = new Date();
+    let processed = 0;
+
+    for (const lead of data.leads) {
+      // Skip wenn gebucht, opted-out oder keine E-Mail
+      if (!lead.email || lead.status === 'booked' || lead.status === 'opted_out') continue;
+      
+      // Skip wenn noch nie kontaktiert
+      if (!lead.lastEmailAt) continue;
+
+      const lastEmail = new Date(lead.lastEmailAt);
+      const daysSinceLastEmail = (now - lastEmail) / (1000 * 60 * 60 * 24);
+      
+      // Nächsten Step ermitteln
+      const currentStep = lead.currentStep || 'step1_intro';
+      const nextStep = getNextStep(currentStep);
+      
+      if (!nextStep) continue; // Sequenz beendet
+
+      // Delay für nächsten Step prüfen
+      const nextTemplate = SEQUENCE_TEMPLATES[nextStep];
+      if (daysSinceLastEmail >= nextTemplate.delay) {
+        try {
+          await this.sendSequenceEmail(lead.id, nextStep);
+          processed++;
+          await this.sleep(2000); // Rate limiting
+        } catch (error) {
+          logger.error(`Sequenz-Fehler für ${lead.company}`, { error: error.message });
+        }
+      }
+    }
+
+    return { processed };
   }
 
   // Tracking verarbeiten
