@@ -10,6 +10,40 @@ import logger from '../utils/logger.js';
 const router = express.Router();
 
 // ============================================
+// WEBHOOK SECRET (optional auth)
+// ============================================
+const MYZEL_WEBHOOK_SECRET = process.env.MYZEL_WEBHOOK_SECRET || null;
+
+// In-memory event storage (last 100 events for dashboard/debug)
+const recentEvents = [];
+const MAX_EVENTS = 100;
+
+function storeEvent(type, payload) {
+  const event = {
+    id: `evt_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+    type,
+    payload,
+    received_at: new Date().toISOString()
+  };
+  recentEvents.unshift(event);
+  if (recentEvents.length > MAX_EVENTS) recentEvents.pop();
+  return event;
+}
+
+// Webhook auth middleware (optional - only validates if secret is set)
+function validateWebhookAuth(req, res, next) {
+  if (!MYZEL_WEBHOOK_SECRET) return next(); // No secret = no auth required
+  
+  const authHeader = req.headers['x-myzel-secret'] || req.headers['authorization'];
+  if (authHeader === MYZEL_WEBHOOK_SECRET || authHeader === `Bearer ${MYZEL_WEBHOOK_SECRET}`) {
+    return next();
+  }
+  
+  logger.warn('🚫 Webhook auth failed', { ip: req.ip, path: req.path });
+  return res.status(401).json({ error: 'Unauthorized', message: 'Invalid or missing X-Myzel-Secret header' });
+}
+
+// ============================================
 // HEALTH & STATUS
 // ============================================
 
@@ -119,29 +153,58 @@ router.get('/check-assignment/:bexioNr', async (req, res) => {
 // ============================================
 
 /**
+ * Get recent webhook events (for dashboard/debug)
+ */
+router.get('/webhook/events', (req, res) => {
+  const limit = Math.min(parseInt(req.query.limit) || 50, MAX_EVENTS);
+  const type = req.query.type; // optional filter
+  
+  let events = recentEvents.slice(0, limit);
+  if (type) events = events.filter(e => e.type === type);
+  
+  res.json({ 
+    events, 
+    total: events.length,
+    auth_required: !!MYZEL_WEBHOOK_SECRET
+  });
+});
+
+/**
  * Fraud Alert Webhook
  * Empfängt Alerts wenn sich Fraud-Scores ändern
  */
-router.post('/webhook/alert', async (req, res) => {
+router.post('/webhook/alert', validateWebhookAuth, async (req, res) => {
   try {
-    const { type, bexio_nr, message, severity, old_score, new_score } = req.body;
+    const { event_type, bexio_nr, severity, scores, evidence_refs, recommendation } = req.body;
     
-    logger.warn('🚨 MYZEL FRAUD ALERT', { type, bexio_nr, message, severity, old_score, new_score });
+    // Store event
+    const storedEvent = storeEvent('alert', req.body);
     
-    // Bei High Risk: Aktionen auslösen
-    if (severity === 'high' || new_score > 50) {
-      logger.error(`⛔ HIGH RISK MAKLER: ${bexio_nr} - Score: ${new_score}`);
+    logger.warn('🚨 MYZEL FRAUD ALERT', { 
+      event_id: storedEvent.id,
+      event_type, 
+      bexio_nr, 
+      severity, 
+      overall_score: scores?.overall,
+      recommendation 
+    });
+    
+    // Bei High/Critical Risk: Aktionen auslösen
+    if (severity === 'high' || severity === 'critical' || (scores?.overall && scores.overall > 0.5)) {
+      logger.error(`⛔ HIGH RISK MAKLER: ${bexio_nr} - Score: ${scores?.overall}`, { evidence_refs });
       // TODO: Nurturing-E-Mails stoppen
       // TODO: Task für Sales erstellen
-      // TODO: Admin benachrichtigen
+      // TODO: Admin benachrichtigen via WebSocket
     }
     
     res.json({ 
-      received: true, 
-      action_taken: severity === 'high' ? 'escalated' : 'logged',
+      received: true,
+      event_id: storedEvent.id,
+      action_taken: (severity === 'high' || severity === 'critical') ? 'escalated' : 'logged',
       timestamp: new Date().toISOString() 
     });
   } catch (error) {
+    logger.error('Webhook /alert error', { error: error.message });
     res.status(500).json({ error: error.message });
   }
 });
@@ -150,7 +213,7 @@ router.post('/webhook/alert', async (req, res) => {
  * Daily Intelligence Webhook
  * Empfängt das tägliche Morning Briefing von Myzel
  */
-router.post('/webhook/daily-intel', async (req, res) => {
+router.post('/webhook/daily-intel', validateWebhookAuth, async (req, res) => {
   try {
     const { 
       high_priority,      // Makler die heute angerufen werden sollten
@@ -160,17 +223,23 @@ router.post('/webhook/daily-intel', async (req, res) => {
       summary            // Zusammenfassung
     } = req.body;
     
+    // Store event
+    const storedEvent = storeEvent('daily-intel', req.body);
+    
     logger.info('📊 DAILY INTELLIGENCE empfangen', {
+      event_id: storedEvent.id,
       high_priority_count: high_priority?.length || 0,
       risky_count: risky_maklers?.length || 0,
-      billing_warnings_count: billing_warnings?.length || 0
+      billing_warnings_count: billing_warnings?.length || 0,
+      summary
     });
     
-    // Speichere für Dashboard-Anzeige
-    // TODO: In DB speichern für Morning Brief Widget
+    // Speichere für Dashboard-Anzeige (in-memory für jetzt)
+    // Das letzte daily-intel Event ist über GET /webhook/events?type=daily-intel abrufbar
     
     res.json({ 
       received: true,
+      event_id: storedEvent.id,
       processed: {
         high_priority: high_priority?.length || 0,
         risky_maklers: risky_maklers?.length || 0,
@@ -179,6 +248,7 @@ router.post('/webhook/daily-intel', async (req, res) => {
       timestamp: new Date().toISOString() 
     });
   } catch (error) {
+    logger.error('Webhook /daily-intel error', { error: error.message });
     res.status(500).json({ error: error.message });
   }
 });
@@ -187,18 +257,31 @@ router.post('/webhook/daily-intel', async (req, res) => {
  * Payment Status Webhook
  * Empfängt Updates wenn sich Zahlungsstatus ändert
  */
-router.post('/webhook/payment', async (req, res) => {
+router.post('/webhook/payment', validateWebhookAuth, async (req, res) => {
   try {
     const { 
       bexio_nr, 
       event_type,        // 'payment_received', 'invoice_overdue', 'balance_low', 'balance_depleted'
+      severity,
       old_balance,
       new_balance,
       leads_available,
+      evidence_refs,
+      recommendation,
       message 
     } = req.body;
     
-    logger.info('💰 PAYMENT STATUS UPDATE', { bexio_nr, event_type, old_balance, new_balance });
+    // Store event
+    const storedEvent = storeEvent('payment', req.body);
+    
+    logger.info('💰 PAYMENT STATUS UPDATE', { 
+      event_id: storedEvent.id,
+      bexio_nr, 
+      event_type, 
+      old_balance, 
+      new_balance,
+      recommendation 
+    });
     
     // Bei kritischen Events: Aktionen auslösen
     if (event_type === 'balance_depleted') {
@@ -208,17 +291,19 @@ router.post('/webhook/payment', async (req, res) => {
     }
     
     if (event_type === 'invoice_overdue') {
-      logger.warn(`⚠️ RECHNUNG ÜBERFÄLLIG: Makler ${bexio_nr}`);
+      logger.warn(`⚠️ RECHNUNG ÜBERFÄLLIG: Makler ${bexio_nr}`, { evidence_refs });
       // TODO: In Risiko-Liste aufnehmen
     }
     
     res.json({ 
-      received: true, 
+      received: true,
+      event_id: storedEvent.id,
       event_type,
       action_required: event_type === 'balance_depleted' || event_type === 'invoice_overdue',
       timestamp: new Date().toISOString() 
     });
   } catch (error) {
+    logger.error('Webhook /payment error', { error: error.message });
     res.status(500).json({ error: error.message });
   }
 });
