@@ -5,6 +5,7 @@
 
 import axios from 'axios';
 import logger from '../utils/logger.js';
+import { myzelBridgeService } from './myzelBridgeService.js';
 
 const CLOSE_API_KEY = process.env.CLOSE_API_KEY;
 
@@ -550,25 +551,60 @@ class CloseService {
   }
 
   /**
-   * Lead einem Makler zuweisen
+   * Lead einem Makler zuweisen - MIT FRAUD-CHECK!
    */
-  async assignLeadToMakler(leadId, maklerId) {
+  async assignLeadToMakler(leadId, maklerId, options = {}) {
+    const { skipFraudCheck = false } = options;
+
+    // Makler-Daten holen um Bexio-Nr zu bekommen
+    const makler = await this.getLead(maklerId);
+    if (!makler) {
+      return { success: false, error: 'Makler nicht gefunden' };
+    }
+
+    const bexioNr = makler.custom?.[`custom.${this.fields.BEXIO_ID}`] || 
+                    makler[`custom.${this.fields.BEXIO_ID}`] ||
+                    maklerId;
+
+    // FRAUD-CHECK via Myzel Bridge
+    if (!skipFraudCheck) {
+      try {
+        const check = await myzelBridgeService.checkBeforeAssignment(bexioNr);
+        
+        if (!check.canAssign) {
+          logger.warn('Lead-Zuweisung BLOCKED durch Myzel', { 
+            leadId, 
+            maklerId, 
+            bexioNr,
+            reason: check.recommendation 
+          });
+          
+          return { 
+            success: false, 
+            blocked: true,
+            reason: check.recommendation,
+            fraudCheck: check.fraud,
+            billingCheck: check.billing
+          };
+        }
+        
+        logger.info('Myzel Fraud-Check bestanden', { bexioNr, check });
+      } catch (error) {
+        logger.warn('Myzel nicht erreichbar - fahre ohne Check fort', { error: error.message });
+      }
+    }
+
     // Lead updaten
     await this.updateLead(leadId, {
-      custom: {
-        'Zugewiesener Makler-ID': maklerId,
-        'Zugewiesen am': new Date().toISOString()
-      }
+      [`custom.${this.fields.ZUGEWIESENER_MAKLER}`]: maklerId,
+      [`custom.${this.fields.ZUWEISUNG_DATUM}`]: new Date().toISOString().split('T')[0]
     });
 
     // Makler Kontingent reduzieren
-    const makler = await this.getLead(maklerId);
-    if (makler) {
-      const kontingent = (makler.custom?.['Kontingent Leads'] || 1) - 1;
-      await this.updateLead(maklerId, {
-        custom: { 'Kontingent Leads': Math.max(0, kontingent) }
-      });
-    }
+    const currentKontingent = makler[`custom.${this.fields.KONTINGENT}`] || 1;
+    await this.updateLead(maklerId, {
+      [`custom.${this.fields.KONTINGENT}`]: Math.max(0, currentKontingent - 1)
+    });
 
     // Task erstellen beim Makler
     await this.createTask(maklerId, {
@@ -576,7 +612,15 @@ class CloseService {
       date: new Date().toISOString().split('T')[0]
     });
 
-    return { success: true, leadId, maklerId };
+    logger.info('Lead erfolgreich zugewiesen', { leadId, maklerId, bexioNr });
+    
+    return { 
+      success: true, 
+      leadId, 
+      maklerId,
+      bexioNr,
+      message: 'Lead erfolgreich zugewiesen (Fraud-Check bestanden)'
+    };
   }
 }
 

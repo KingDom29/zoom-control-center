@@ -36,6 +36,7 @@ import unifiedRouter from './routes/unified.js';
 import unifiedDashboardRouter from './routes/unifiedDashboard.js';
 import twilioRouter from './routes/twilio.js';
 import closeRouter from './routes/close.js';
+import myzelRouter from './routes/myzel.js';
 import { meetingSummaryService } from './services/meetingSummaryService.js';
 import { performanceMiddleware, getMetrics, getMemoryUsage } from './middleware/performance.js';
 import { cacheMiddleware, getCacheStats } from './middleware/cache.js';
@@ -195,6 +196,7 @@ app.use('/api/unified', unifiedRouter);
 app.use('/crm', unifiedDashboardRouter);
 app.use('/api/twilio', twilioRouter);
 app.use('/api/close', closeRouter);
+app.use('/api/myzel', myzelRouter);
 
 // Enhanced Webhook Routes
 app.post('/api/webhooks', async (req, res) => {
