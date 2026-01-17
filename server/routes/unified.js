@@ -10,6 +10,7 @@ import {
   brandingService,
   callManagerService,
   teamAssignmentService,
+  actionEngineService,
   STAGES,
   SOURCES,
   SEQUENCE_TEMPLATES,
@@ -485,6 +486,120 @@ router.get('/team/stats', async (req, res) => {
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
+});
+
+// ============================================
+// ACTION ENGINE - One-Click Actions + Learning
+// ============================================
+
+// Learning Stats & Gewichte
+router.get('/learning/stats', (req, res) => {
+  res.json(actionEngineService.getLearningStats());
+});
+
+// Gewicht anpassen
+router.put('/learning/weight/:reason', (req, res) => {
+  try {
+    const { weight } = req.body;
+    actionEngineService.setWeight(req.params.reason, parseInt(weight));
+    res.json({ success: true, weights: actionEngineService.getWeights() });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+// Feedback für Empfehlung geben
+router.post('/learning/feedback', (req, res) => {
+  try {
+    const feedback = actionEngineService.submitFeedback(req.body);
+    res.json(feedback);
+  } catch (error) {
+    logger.error('Feedback Fehler', { error: error.message });
+    res.status(400).json({ error: error.message });
+  }
+});
+
+// ONE-CLICK: Termin-Vorschläge senden
+router.post('/action/send-meeting-proposal/:contactId', async (req, res) => {
+  try {
+    const result = await actionEngineService.sendMeetingProposal(req.params.contactId, req.body);
+    res.json(result);
+  } catch (error) {
+    logger.error('Meeting Proposal Fehler', { error: error.message });
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ONE-CLICK: Post-Call Actions (alles automatisch)
+router.post('/action/post-call/:contactId', async (req, res) => {
+  try {
+    const result = await actionEngineService.executePostCallActions(req.params.contactId, req.body);
+    res.json(result);
+  } catch (error) {
+    logger.error('Post-Call Actions Fehler', { error: error.message });
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Slot buchen (von Termin-Vorschlag E-Mail)
+router.get('/book-slot', async (req, res) => {
+  try {
+    const { contactId, date, brand } = req.query;
+    const contact = unifiedContactService.getContact(contactId);
+    
+    if (!contact) {
+      return res.send('<h1>Fehler</h1><p>Kontakt nicht gefunden</p>');
+    }
+
+    // Meeting erstellen
+    const meetingDate = new Date(date);
+    const brandConfig = brandingService.getBrand(brand || contact.activeBrand);
+
+    const meeting = await require('../zoomAuth.js').zoomApi('POST', '/users/me/meetings', {
+      topic: `${brandConfig.name} - ${contact.company || contact.firstName}`,
+      type: 2,
+      start_time: meetingDate.toISOString(),
+      duration: 30,
+      timezone: 'Europe/Berlin',
+      settings: { auto_recording: 'cloud' }
+    });
+
+    // Stage updaten
+    unifiedContactService.updateStage(contactId, STAGES.MEETING_SCHEDULED, 'Slot selected by contact');
+
+    // Bestätigungs-E-Mail
+    await communicationService.sendMeetingInvitation(contactId, {
+      topic: meeting.topic,
+      startTime: meeting.start_time,
+      duration: meeting.duration,
+      joinUrl: meeting.join_url
+    });
+
+    res.send(`
+      <html>
+      <head><title>Termin bestätigt!</title></head>
+      <body style="font-family: Arial; text-align: center; padding: 50px;">
+        <h1 style="color: #22c55e;">✅ Termin bestätigt!</h1>
+        <p>Ihr Termin am <strong>${meetingDate.toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long' })}</strong> um <strong>${meetingDate.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })} Uhr</strong> ist bestätigt.</p>
+        <p>Sie erhalten eine E-Mail mit dem Meeting-Link.</p>
+        <p style="margin-top: 30px;">
+          <a href="${meeting.join_url}" style="background: #1a73e8; color: white; padding: 15px 30px; text-decoration: none; border-radius: 8px;">
+            🎥 Zum Meeting-Link
+          </a>
+        </p>
+      </body>
+      </html>
+    `);
+  } catch (error) {
+    logger.error('Book Slot Fehler', { error: error.message });
+    res.status(500).send(`<h1>Fehler</h1><p>${error.message}</p>`);
+  }
+});
+
+// Action History
+router.get('/action/history', (req, res) => {
+  const history = actionEngineService.getActionHistory(req.query.contactId, parseInt(req.query.limit) || 20);
+  res.json(history);
 });
 
 export default router;
