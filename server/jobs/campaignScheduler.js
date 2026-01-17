@@ -5,6 +5,7 @@ import { teamActivityService } from '../services/teamActivityService.js';
 import { meetingQualityService } from '../services/meetingQualityService.js';
 import { salesAutomationService } from '../services/salesAutomationService.js';
 import { pipelineService } from '../services/unified/pipelineService.js';
+import { callManagerService } from '../services/unified/callManagerService.js';
 import logger from '../utils/logger.js';
 
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
@@ -737,6 +738,35 @@ const unifiedSequenceJob = cron.schedule('0 9,10,11,12,13,14,15,16,17 * * 1-5', 
 }, { timezone: 'Europe/Berlin' });
 logger.info('🚀 Unified Sequence Job: Werktags stündlich 9-17 Uhr');
 
+// ============================================
+// CALL MANAGER - Tägliche Anruf-Liste
+// ============================================
+
+async function runDailyCallManager() {
+  logger.info('📞 Starte Call Manager...');
+  try {
+    const callList = await callManagerService.generateCallList({ limit: 15, minPriority: 'high' });
+    logger.info('📞 Call List generiert', { total: callList.callsRecommended });
+    
+    // Zendesk Tasks für dringende Anrufe erstellen
+    if (callList.calls.length > 0) {
+      const tasks = await callManagerService.createCallTasks(callList);
+      logger.info('✅ Zendesk Call Tasks erstellt', { created: tasks.created });
+    }
+    
+    return callList;
+  } catch (error) {
+    logger.error('Call Manager Fehler', { error: error.message });
+    throw error;
+  }
+}
+
+// Täglich 8:30 Uhr - Anruf-Liste für den Tag
+const callManagerJob = cron.schedule('30 8 * * 1-5', async () => {
+  await runDailyCallManager();
+}, { timezone: 'Europe/Berlin' });
+logger.info('📞 Call Manager Job: Werktags 8:30 Uhr');
+
 // Export für manuelle Ausführung und Status-Check
 export { 
   runCampaignBatch, campaignJob, 
@@ -758,5 +788,6 @@ export {
   runNoShowReschedule, noShowRescheduleJob,
   runWarmUps, warmUpJob,
   runDealClosers, dealCloserJob,
-  runUnifiedSequences, unifiedSequenceJob
+  runUnifiedSequences, unifiedSequenceJob,
+  runDailyCallManager, callManagerJob
 };

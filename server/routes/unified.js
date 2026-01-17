@@ -8,9 +8,11 @@ import {
   communicationService,
   pipelineService,
   brandingService,
+  callManagerService,
   STAGES,
   SOURCES,
-  SEQUENCE_TEMPLATES
+  SEQUENCE_TEMPLATES,
+  PRIORITY
 } from '../services/unified/index.js';
 import logger from '../utils/logger.js';
 
@@ -325,6 +327,83 @@ router.post('/bulk/email', async (req, res) => {
     const result = await communicationService.sendBulkEmail(contactIds, template, { brand });
     res.json(result);
   } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================
+// CALL MANAGER
+// ============================================
+
+// Einzelnen Kontakt analysieren
+router.get('/call-manager/analyze/:contactId', async (req, res) => {
+  try {
+    const analysis = await callManagerService.analyzeContact(req.params.contactId);
+    if (!analysis) return res.status(404).json({ error: 'Contact not found' });
+    res.json(analysis);
+  } catch (error) {
+    logger.error('Call Analyse Fehler', { error: error.message });
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Tägliche Anruf-Liste generieren
+router.get('/call-manager/list', async (req, res) => {
+  try {
+    const options = {
+      limit: parseInt(req.query.limit) || 20,
+      brand: req.query.brand,
+      minPriority: req.query.minPriority || PRIORITY.LOW
+    };
+    const callList = await callManagerService.generateCallList(options);
+    res.json(callList);
+  } catch (error) {
+    logger.error('Call List Fehler', { error: error.message });
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Zendesk Tasks für Anrufe erstellen
+router.post('/call-manager/create-tasks', async (req, res) => {
+  try {
+    const callList = await callManagerService.generateCallList({ 
+      limit: req.body.limit || 10,
+      minPriority: PRIORITY.HIGH 
+    });
+    const result = await callManagerService.createCallTasks(callList);
+    res.json({ ...result, callList });
+  } catch (error) {
+    logger.error('Call Tasks Fehler', { error: error.message });
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// SMS über Zendesk senden
+router.post('/send/sms-zendesk', async (req, res) => {
+  try {
+    const { contactId, message } = req.body;
+    if (!contactId || !message) {
+      return res.status(400).json({ error: 'contactId and message required' });
+    }
+    const result = await callManagerService.sendSmsViaZendesk(contactId, message);
+    res.json(result);
+  } catch (error) {
+    logger.error('SMS Zendesk Fehler', { error: error.message });
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// WhatsApp über Zendesk senden
+router.post('/send/whatsapp-zendesk', async (req, res) => {
+  try {
+    const { contactId, message } = req.body;
+    if (!contactId || !message) {
+      return res.status(400).json({ error: 'contactId and message required' });
+    }
+    const result = await callManagerService.sendWhatsAppViaZendesk(contactId, message);
+    res.json(result);
+  } catch (error) {
+    logger.error('WhatsApp Zendesk Fehler', { error: error.message });
     res.status(500).json({ error: error.message });
   }
 });
