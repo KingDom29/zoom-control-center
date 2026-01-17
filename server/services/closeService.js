@@ -198,12 +198,24 @@ class CloseService {
     return this.request('GET', '/status/lead/');
   }
 
+  async updateLeadStatus(statusId, data) {
+    return this.request('PUT', `/status/lead/${statusId}/`, data);
+  }
+
+  async deleteLeadStatus(statusId) {
+    return this.request('DELETE', `/status/lead/${statusId}/`);
+  }
+
   async getOpportunityStatuses() {
     return this.request('GET', '/status/opportunity/');
   }
 
   async getPipelines() {
     return this.request('GET', '/pipeline/');
+  }
+
+  async updatePipeline(pipelineId, data) {
+    return this.request('PUT', `/pipeline/${pipelineId}/`, data);
   }
 
   // ============================================

@@ -195,6 +195,24 @@ router.get('/statuses/lead', async (req, res) => {
   }
 });
 
+router.put('/statuses/lead/:id', async (req, res) => {
+  try {
+    const result = await closeService.updateLeadStatus(req.params.id, req.body);
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.delete('/statuses/lead/:id', async (req, res) => {
+  try {
+    await closeService.deleteLeadStatus(req.params.id);
+    res.json({ success: true, deleted: req.params.id });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 router.get('/statuses/opportunity', async (req, res) => {
   try {
     const statuses = await closeService.getOpportunityStatuses();
