@@ -1,0 +1,294 @@
+/**
+ * Twilio Service
+ * SMS und Voice Calls
+ */
+
+import twilio from 'twilio';
+import logger from '../utils/logger.js';
+
+const TWILIO_ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID;
+const TWILIO_AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN;
+const TWILIO_PHONE_NUMBER = process.env.TWILIO_PHONE_NUMBER;
+
+class TwilioService {
+  
+  constructor() {
+    this.client = null;
+    this.initialized = false;
+  }
+
+  init() {
+    if (TWILIO_ACCOUNT_SID && TWILIO_AUTH_TOKEN) {
+      try {
+        this.client = twilio(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN);
+        this.initialized = true;
+        logger.info('✅ Twilio Service initialisiert');
+      } catch (error) {
+        logger.error('Twilio Init Fehler', { error: error.message });
+      }
+    } else {
+      logger.warn('⚠️ Twilio nicht konfiguriert (TWILIO_ACCOUNT_SID/AUTH_TOKEN fehlt)');
+    }
+  }
+
+  isConfigured() {
+    return this.initialized && this.client !== null;
+  }
+
+  // ============================================
+  // SMS
+  // ============================================
+
+  /**
+   * SMS senden
+   */
+  async sendSms(to, message, options = {}) {
+    if (!this.isConfigured()) {
+      logger.warn('Twilio nicht konfiguriert - SMS nicht gesendet');
+      return { success: false, error: 'Twilio not configured', simulated: true };
+    }
+
+    // Telefonnummer formatieren
+    const formattedTo = this.formatPhoneNumber(to);
+    if (!formattedTo) {
+      return { success: false, error: 'Invalid phone number' };
+    }
+
+    try {
+      const result = await this.client.messages.create({
+        body: message,
+        from: TWILIO_PHONE_NUMBER,
+        to: formattedTo
+      });
+
+      logger.info('📱 SMS gesendet', { 
+        to: formattedTo, 
+        messageId: result.sid,
+        status: result.status 
+      });
+
+      return {
+        success: true,
+        messageId: result.sid,
+        status: result.status,
+        to: formattedTo,
+        from: TWILIO_PHONE_NUMBER
+      };
+    } catch (error) {
+      logger.error('SMS Fehler', { to, error: error.message });
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Meeting Reminder SMS
+   */
+  async sendMeetingReminder(to, meeting) {
+    const meetingDate = new Date(meeting.startTime || meeting.start_time);
+    const dateStr = meetingDate.toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric', month: 'short' });
+    const timeStr = meetingDate.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+
+    const message = `📅 Reminder: Ihr Termin "${meeting.topic}" ist am ${dateStr} um ${timeStr} Uhr. Link: ${meeting.join_url || meeting.joinUrl}`;
+
+    return this.sendSms(to, message);
+  }
+
+  /**
+   * Quick SMS Templates
+   */
+  async sendQuickSms(to, template, data = {}) {
+    const templates = {
+      meeting_reminder_1h: `⏰ In 1 Stunde: ${data.topic}. Link: ${data.joinUrl}`,
+      meeting_reminder_24h: `📅 Morgen: ${data.topic} um ${data.time}. Link: ${data.joinUrl}`,
+      no_show: `Wir haben Sie vermisst! Neuer Termin? Antworten Sie mit JA.`,
+      callback: `Wir haben versucht Sie zu erreichen. Wann passt es Ihnen? Antworten Sie mit Ihrer Wunschzeit.`,
+      thank_you: `Danke für das Gespräch! Bei Fragen: ${data.phone || TWILIO_PHONE_NUMBER}`
+    };
+
+    const message = templates[template];
+    if (!message) {
+      return { success: false, error: 'Template not found' };
+    }
+
+    return this.sendSms(to, message);
+  }
+
+  // ============================================
+  // VOICE CALLS
+  // ============================================
+
+  /**
+   * Outbound Call initiieren (verbindet zwei Nummern)
+   */
+  async initiateCall(to, agentPhone, options = {}) {
+    if (!this.isConfigured()) {
+      return { success: false, error: 'Twilio not configured' };
+    }
+
+    const formattedTo = this.formatPhoneNumber(to);
+    const formattedAgent = this.formatPhoneNumber(agentPhone);
+
+    if (!formattedTo || !formattedAgent) {
+      return { success: false, error: 'Invalid phone number' };
+    }
+
+    try {
+      // TwiML URL für Call-Handling
+      const twimlUrl = options.twimlUrl || `${process.env.PUBLIC_URL}/api/twilio/twiml/connect?to=${encodeURIComponent(formattedTo)}`;
+
+      const call = await this.client.calls.create({
+        url: twimlUrl,
+        to: formattedAgent, // Zuerst den Agent anrufen
+        from: TWILIO_PHONE_NUMBER,
+        record: options.record !== false, // Default: aufzeichnen
+        recordingStatusCallback: `${process.env.PUBLIC_URL}/api/twilio/recording-status`
+      });
+
+      logger.info('📞 Call initiiert', { 
+        callSid: call.sid, 
+        to: formattedTo, 
+        agent: formattedAgent 
+      });
+
+      return {
+        success: true,
+        callSid: call.sid,
+        status: call.status,
+        to: formattedTo,
+        agent: formattedAgent
+      };
+    } catch (error) {
+      logger.error('Call Fehler', { to, error: error.message });
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Call Status abrufen
+   */
+  async getCallStatus(callSid) {
+    if (!this.isConfigured()) return null;
+
+    try {
+      const call = await this.client.calls(callSid).fetch();
+      return {
+        sid: call.sid,
+        status: call.status,
+        duration: call.duration,
+        startTime: call.startTime,
+        endTime: call.endTime,
+        direction: call.direction
+      };
+    } catch (error) {
+      logger.error('Call Status Fehler', { callSid, error: error.message });
+      return null;
+    }
+  }
+
+  /**
+   * Recordings abrufen
+   */
+  async getRecordings(callSid) {
+    if (!this.isConfigured()) return [];
+
+    try {
+      const recordings = await this.client.recordings.list({ callSid, limit: 10 });
+      return recordings.map(r => ({
+        sid: r.sid,
+        duration: r.duration,
+        url: `https://api.twilio.com${r.uri.replace('.json', '.mp3')}`,
+        dateCreated: r.dateCreated
+      }));
+    } catch (error) {
+      logger.error('Recordings Fehler', { callSid, error: error.message });
+      return [];
+    }
+  }
+
+  // ============================================
+  // HELPERS
+  // ============================================
+
+  formatPhoneNumber(phone) {
+    if (!phone) return null;
+
+    // Entferne alles außer Zahlen und +
+    let cleaned = phone.replace(/[^\d+]/g, '');
+
+    // Deutsche Nummer ohne Ländercode
+    if (cleaned.startsWith('0') && !cleaned.startsWith('00')) {
+      cleaned = '+49' + cleaned.substring(1);
+    }
+    // Schweizer Nummer
+    else if (cleaned.startsWith('0041')) {
+      cleaned = '+41' + cleaned.substring(4);
+    }
+    // Deutsche Nummer mit 0049
+    else if (cleaned.startsWith('0049')) {
+      cleaned = '+49' + cleaned.substring(4);
+    }
+    // Schon mit + 
+    else if (!cleaned.startsWith('+')) {
+      // Annahme: Deutsche Nummer
+      if (cleaned.length >= 10) {
+        cleaned = '+49' + cleaned;
+      }
+    }
+
+    // Validierung: Mindestens 10 Ziffern
+    if (cleaned.replace(/\D/g, '').length < 10) {
+      return null;
+    }
+
+    return cleaned;
+  }
+
+  /**
+   * SMS History abrufen
+   */
+  async getSmsHistory(to, limit = 20) {
+    if (!this.isConfigured()) return [];
+
+    try {
+      const formattedTo = this.formatPhoneNumber(to);
+      const messages = await this.client.messages.list({
+        to: formattedTo,
+        limit
+      });
+
+      return messages.map(m => ({
+        sid: m.sid,
+        body: m.body,
+        status: m.status,
+        direction: m.direction,
+        dateSent: m.dateSent
+      }));
+    } catch (error) {
+      logger.error('SMS History Fehler', { error: error.message });
+      return [];
+    }
+  }
+
+  /**
+   * Account Balance
+   */
+  async getBalance() {
+    if (!this.isConfigured()) return null;
+
+    try {
+      const balance = await this.client.balance.fetch();
+      return {
+        balance: balance.balance,
+        currency: balance.currency
+      };
+    } catch (error) {
+      logger.error('Balance Fehler', { error: error.message });
+      return null;
+    }
+  }
+}
+
+export const twilioService = new TwilioService();
+
+// Auto-Init
+twilioService.init();
