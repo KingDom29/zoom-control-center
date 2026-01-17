@@ -144,33 +144,98 @@ class MyzelBridgeService {
 
   /**
    * Vollständige Prüfung vor Lead-Zuweisung
-   * Kombiniert Fraud-Check + Billing-Check
+   * Nutzt den neuen /check-lead-assignment Endpoint mit:
+   * - Fraud Score + Call-Historie
+   * - Billing Status (Bexio)
+   * - External Signals (M365, etc.)
+   * - Alternative Makler bei Block
+   * 
+   * @param {string} bexioNr - Makler Bexio-Nummer
+   * @param {Object} leadData - Optional: Lead-Daten für Kontext
    */
-  async checkBeforeAssignment(bexioNr) {
-    const [fraud, billing] = await Promise.all([
-      this.isMaklerSafe(bexioNr),
-      this.canReceiveLeads(bexioNr)
-    ]);
+  async checkBeforeAssignment(bexioNr, leadData = null) {
+    try {
+      logger.info('🔍 Check Lead Assignment', { bexioNr });
 
-    const canAssign = fraud.safe && billing.canReceive;
+      const response = await axios.post(`${this.baseUrl}/check-lead-assignment`, {
+        bexio_nr: bexioNr,
+        lead_id: leadData?.id,
+        lead_data: leadData ? {
+          name: leadData.name,
+          phone: leadData.phone,
+          email: leadData.email,
+          plz: leadData.plz,
+          immobilie_typ: leadData.immobilieTyp
+        } : null
+      }, { timeout: 15000 });
 
-    return {
-      bexioNr,
-      canAssign,
-      fraud: {
-        safe: fraud.safe,
-        score: fraud.fraudScore,
-        reason: fraud.reason
-      },
-      billing: {
-        canReceive: billing.canReceive,
-        leadsAvailable: billing.leadsAvailable,
-        reason: billing.recommendation
-      },
-      recommendation: canAssign 
-        ? `✅ Lead kann zugewiesen werden (${billing.leadsAvailable} verfügbar)`
-        : `❌ BLOCKED: ${!fraud.safe ? fraud.reason : billing.recommendation}`
-    };
+      const result = response.data;
+
+      logger.info('🔍 Assignment Check Result', {
+        bexioNr,
+        canAssign: result.can_assign,
+        recommendation: result.recommendation,
+        fraudScore: result.fraud_score,
+        billingStatus: result.billing_status
+      });
+
+      return {
+        bexioNr,
+        canAssign: result.can_assign,
+        fraudScore: result.fraud_score,
+        billingStatus: result.billing_status,
+        reasons: result.reasons || [],
+        recommendation: result.recommendation,
+        alternativeMaklers: result.alternative_maklers || [],
+        checkedAt: result.checked_at,
+        // Legacy-kompatible Felder
+        fraud: {
+          safe: result.can_assign && result.fraud_score < 0.5,
+          score: result.fraud_score,
+          reason: result.reasons?.find(r => r.includes('fraud') || r.includes('call')) || null
+        },
+        billing: {
+          canReceive: result.billing_status === 'ok',
+          status: result.billing_status,
+          reason: result.reasons?.find(r => r.includes('billing') || r.includes('balance')) || null
+        }
+      };
+
+    } catch (error) {
+      logger.error('Check Assignment Fehler', { 
+        bexioNr, 
+        error: error.response?.data || error.message 
+      });
+
+      // Fallback auf alte Methode bei Fehler
+      logger.warn('⚠️ Fallback auf lokale Checks');
+      const [fraud, billing] = await Promise.all([
+        this.isMaklerSafe(bexioNr),
+        this.canReceiveLeads(bexioNr)
+      ]);
+
+      const canAssign = fraud.safe && billing.canReceive;
+
+      return {
+        bexioNr,
+        canAssign,
+        fraudScore: fraud.fraudScore / 100, // Normalize to 0-1
+        billingStatus: billing.canReceive ? 'ok' : 'blocked',
+        reasons: [!fraud.safe ? fraud.reason : null, !billing.canReceive ? billing.recommendation : null].filter(Boolean),
+        recommendation: canAssign ? 'assign' : 'block',
+        alternativeMaklers: [],
+        fraud: {
+          safe: fraud.safe,
+          score: fraud.fraudScore,
+          reason: fraud.reason
+        },
+        billing: {
+          canReceive: billing.canReceive,
+          leadsAvailable: billing.leadsAvailable,
+          reason: billing.recommendation
+        }
+      };
+    }
   }
 
   /**
