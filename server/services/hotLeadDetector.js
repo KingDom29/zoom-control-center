@@ -79,7 +79,8 @@ class HotLeadDetector {
    */
   async createInstantMeeting(leadName, leadEmail) {
     try {
-      const meeting = await zoomApi('POST', '/users/me/meetings', {
+      // Meeting mit info@maklerplan.ch erstellen (Zoom-User)
+      const meeting = await zoomApi('POST', '/users/info@maklerplan.ch/meetings', {
         topic: `🔥 Hot Lead: ${leadName}`,
         type: 1, // Instant meeting
         duration: 30,
@@ -171,7 +172,7 @@ class HotLeadDetector {
    * Sendet Notification für Hot Lead
    */
   async notifyHotLead(lead, options = {}) {
-    const { createMeeting = true, notifyEmail = 'support@maklerplan.com' } = options;
+    const { createMeeting = true, notifyEmail = 'de@maklerplan.com' } = options;
 
     const notifications = [];
 
@@ -241,7 +242,7 @@ class HotLeadDetector {
    * Scannt und benachrichtigt automatisch
    */
   async scanAndNotify(options = {}) {
-    const { minScore = 50, notifyEmail = 'support@maklerplan.com', createMeeting = true } = options;
+    const { minScore = 50, notifyEmail = 'de@maklerplan.com', createMeeting = true } = options;
 
     const result = await this.scanInbox({ minScore });
     const notified = [];

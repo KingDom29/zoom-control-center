@@ -405,7 +405,7 @@ async function runHotLeadScan() {
     
     const result = await hotLeadDetector.scanAndNotify({
       minScore: 50,
-      notifyEmail: 'support@maklerplan.com',
+      notifyEmail: 'de@maklerplan.com',
       createMeeting: true
     });
     
