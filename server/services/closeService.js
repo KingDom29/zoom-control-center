@@ -8,10 +8,27 @@ import logger from '../utils/logger.js';
 
 const CLOSE_API_KEY = process.env.CLOSE_API_KEY;
 
+// Close Custom Field IDs (aus deinem Close Account)
+const CUSTOM_FIELDS = {
+  // Makler Fields
+  MAKLER_ID: 'cf_Y2d1QZkiAdxUc6lLXFQ9jvyIs9BMTTYY4x6FNbmedA0',
+  BEXIO_ID: 'cf_AVokd0aJG9U6fi2gG5R7LgPo0lrVqnNPJ8zWzWHJTky',
+  PARTNER_ABO: 'cf_bax6RWceG5MyONSmL8MVomYKkGFY7WTsuFrDcgEs89q',
+  KONTINGENT: 'cf_gmYQtuaxs9PnnaabG3BawLNBaiT0HLEiG3ZW952U83U',
+  UMKREIS: 'cf_o2DnvZkQyAIagRUTUxS5WUxmZofuVS6E5fsKNBJ4DZ1',
+  VERMITTELTE_LEADS: 'cf_K8poQgxjji1IekYd3ZcIPsyjTIpMVlRnvXGAQuT64Vi',
+  
+  // Eigentümer/Immobilien Fields
+  PLZ_IMMOBILIE: 'cf_3AfXiLIZpt0X0VbPwcVlhGATwLfRoXV4f9ZIgEDN2y0',
+  ZUGEWIESENER_MAKLER: 'cf_U5YAt35H9XzlzQKO7M0r0ZIZ0CSaFeocjjzxKw1Gguo',
+  ZUWEISUNG_DATUM: 'cf_byrT8cziGBDyV2EJC2e1PrBGSLqk0eOXW3pHise2ktL'
+};
+
 class CloseService {
   constructor() {
     this.baseUrl = 'https://api.close.com/api/v1';
     this.auth = CLOSE_API_KEY ? Buffer.from(`${CLOSE_API_KEY}:`).toString('base64') : null;
+    this.fields = CUSTOM_FIELDS;
   }
 
   isConfigured() {
@@ -449,33 +466,20 @@ class CloseService {
       verkaufsgrund,
       zeitrahmen,
       preis,
-      maklerId // Welcher Makler-Partner bekommt den Lead
+      maklerId
     } = data;
 
     const leadData = {
-      name: name || `Eigentümer ${plz}`,
-      description: `${immobilienTyp || 'Immobilie'} in ${plz} ${ort}`,
+      name: name || `Eigentümer ${plz || ''}`,
+      description: `${immobilienTyp || 'Immobilie'} in ${plz || ''} ${ort || ''}`,
       status_id: 'stat_MNwde2bb9U6q8UIBiwqKN6luKLezxVoTRvQBrFcCcM3',
       contacts: [{
         name: name || 'Eigentümer',
         emails: email ? [{ email, type: 'office' }] : [],
         phones: phone ? [{ phone, type: 'mobile' }] : []
       }],
-      addresses: [{
-        address_1: strasse || '',
-        city: ort || '',
-        zipcode: plz || '',
-        country: 'DE'
-      }],
-      custom: {
-        'Typ': 'eigentuemer',
-        'Immobilientyp': immobilienTyp || '',
-        'PLZ Immobilie': plz || '',
-        'Verkaufsgrund': verkaufsgrund || '',
-        'Zeitrahmen': zeitrahmen || '',
-        'Preisvorstellung': preis || '',
-        'Zugewiesener Makler-ID': maklerId || ''
-      }
+      [`custom.${this.fields.PLZ_IMMOBILIE}`]: plz || '',
+      [`custom.${this.fields.ZUGEWIESENER_MAKLER}`]: maklerId || ''
     };
 
     return this.createLead(leadData);
@@ -502,26 +506,19 @@ class CloseService {
     const leadData = {
       name: firma,
       url: website || null,
-      description: `Makler-Partner in ${plz} ${ort}`,
+      description: `Makler-Partner in ${plz || ''} ${ort || ''}`,
       status_id: 'stat_MNwde2bb9U6q8UIBiwqKN6luKLezxVoTRvQBrFcCcM3',
       contacts: [{
         name: ansprechpartner || firma,
         emails: email ? [{ email, type: 'office' }] : [],
         phones: phone ? [{ phone, type: 'office' }] : []
       }],
-      addresses: [{
-        city: ort || '',
-        zipcode: plz || '',
-        country: 'DE'
-      }],
-      custom: {
-        'Typ': 'makler',
-        'Partner-Abonnement': abonnement || 'PREPAID',
-        'Kontingent Leads': kontingent || 0,
-        'Partner-Umkreis km': umkreis || 25,
-        'Bexio Kundennummer': bexioId || '',
-        'Makler-ID': bexioId || ''
-      }
+      [`custom.${this.fields.MAKLER_ID}`]: bexioId || '',
+      [`custom.${this.fields.BEXIO_ID}`]: bexioId || '',
+      [`custom.${this.fields.PARTNER_ABO}`]: abonnement || 'PREPAID',
+      [`custom.${this.fields.KONTINGENT}`]: kontingent || 0,
+      [`custom.${this.fields.UMKREIS}`]: umkreis || 25,
+      [`custom.${this.fields.PLZ_IMMOBILIE}`]: plz || ''
     };
 
     return this.createLead(leadData);
