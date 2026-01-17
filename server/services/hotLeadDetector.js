@@ -217,9 +217,17 @@ class HotLeadDetector {
 
             ${meetingInfo}
 
-            <p style="color: #666; font-size: 12px; margin-top: 20px;">
-              Maklerplan Hot Lead Detector<br>
-              Automatisch generiert am ${new Date().toLocaleString('de-DE')}
+            <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
+            <p style="color: #666; font-size: 11px; line-height: 1.5;">
+              <strong>Maklerplan Pro GmbH</strong><br>
+              Friedrichstraße 123, 10117 Berlin<br>
+              Geschäftsführer: [Name] | HRB 123456 B | AG Charlottenburg<br>
+              <br>
+              <strong>Maklerplan GmbH</strong><br>
+              Bahnhofstrasse 10, 6300 Zug, Schweiz<br>
+              CHE-123.456.789<br>
+              <br>
+              Hot Lead Detector - Automatisch generiert am ${new Date().toLocaleString('de-DE')}
             </p>
           </div>
         `
