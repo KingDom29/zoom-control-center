@@ -3,6 +3,7 @@ import { campaignService } from '../services/campaignService.js';
 import { sequenceEngine } from '../services/sequenceEngine.js';
 import { teamActivityService } from '../services/teamActivityService.js';
 import { meetingQualityService } from '../services/meetingQualityService.js';
+import { salesAutomationService } from '../services/salesAutomationService.js';
 import logger from '../utils/logger.js';
 
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
@@ -655,6 +656,64 @@ const inactivityReminderJob = cron.schedule('0 14 * * 1-5', async () => {
 }, { timezone: 'Europe/Berlin' });
 logger.info('📧 Inactivity Reminder Job: Werktags 14:00 Uhr');
 
+// ============================================
+// SALES AUTOMATION JOBS
+// ============================================
+
+// No-Show Reschedule - Täglich 9:00 Uhr
+async function runNoShowReschedule() {
+  logger.info('🔄 Starte No-Show Reschedule...');
+  try {
+    const result = await salesAutomationService.processNoShows();
+    logger.info('✅ No-Show Reschedule abgeschlossen', { processed: result.processed });
+    return result;
+  } catch (error) {
+    logger.error('No-Show Reschedule Fehler', { error: error.message });
+    throw error;
+  }
+}
+
+const noShowRescheduleJob = cron.schedule('0 9 * * 1-5', async () => {
+  await runNoShowReschedule();
+}, { timezone: 'Europe/Berlin' });
+logger.info('🔄 No-Show Reschedule Job: Werktags 9:00 Uhr');
+
+// Pre-Meeting Warm-Ups - Alle 2 Stunden
+async function runWarmUps() {
+  logger.info('📧 Starte Warm-Ups...');
+  try {
+    const result = await salesAutomationService.processPreMeetingWarmUps();
+    logger.info('✅ Warm-Ups abgeschlossen', result);
+    return result;
+  } catch (error) {
+    logger.error('Warm-Ups Fehler', { error: error.message });
+    throw error;
+  }
+}
+
+const warmUpJob = cron.schedule('0 8,10,12,14,16 * * 1-5', async () => {
+  await runWarmUps();
+}, { timezone: 'Europe/Berlin' });
+logger.info('📧 Warm-Up Job: Werktags 8, 10, 12, 14, 16 Uhr');
+
+// Deal-Closer Sequenzen - Täglich 10:00 und 15:00 Uhr
+async function runDealClosers() {
+  logger.info('🎯 Starte Deal-Closer Sequenzen...');
+  try {
+    const result = await salesAutomationService.processDealCloserSequences();
+    logger.info('✅ Deal-Closer abgeschlossen', { processed: result.processed });
+    return result;
+  } catch (error) {
+    logger.error('Deal-Closer Fehler', { error: error.message });
+    throw error;
+  }
+}
+
+const dealCloserJob = cron.schedule('0 10,15 * * 1-5', async () => {
+  await runDealClosers();
+}, { timezone: 'Europe/Berlin' });
+logger.info('🎯 Deal-Closer Job: Werktags 10:00 und 15:00 Uhr');
+
 // Export für manuelle Ausführung und Status-Check
 export { 
   runCampaignBatch, campaignJob, 
@@ -672,5 +731,8 @@ export {
   runTeamReport, dailyTeamReportJob, weeklyTeamReportJob,
   runNoShowCheck, noShowCheckJob,
   runProductivityReport, productivityReportJob,
-  runInactivityReminders, inactivityReminderJob
+  runInactivityReminders, inactivityReminderJob,
+  runNoShowReschedule, noShowRescheduleJob,
+  runWarmUps, warmUpJob,
+  runDealClosers, dealCloserJob
 };

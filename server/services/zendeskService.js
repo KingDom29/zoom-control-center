@@ -251,6 +251,164 @@ ${isUrgent ? '<p style="background: #fef2f2; padding: 15px; border-radius: 8px; 
       tags: ['test']
     });
   }
+
+  // ============================================
+  // KUNDENAKTIVITÄTS-TRACKING
+  // ============================================
+
+  /**
+   * Tickets eines Kunden abrufen (nach E-Mail)
+   */
+  async getCustomerTickets(email) {
+    if (!this.isConfigured()) return { tickets: [], error: 'Zendesk nicht konfiguriert' };
+
+    try {
+      const response = await axios.get(
+        `${this.baseUrl}/search.json?query=type:ticket requester:${encodeURIComponent(email)}`,
+        {
+          headers: {
+            'Authorization': `Basic ${this.auth}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+
+      return {
+        tickets: response.data.results || [],
+        count: response.data.count || 0
+      };
+    } catch (error) {
+      logger.error('Zendesk Tickets abrufen Fehler', { email, error: error.message });
+      return { tickets: [], error: error.message };
+    }
+  }
+
+  /**
+   * Ticket-Kommentare abrufen
+   */
+  async getTicketComments(ticketId) {
+    if (!this.isConfigured()) return { comments: [] };
+
+    try {
+      const response = await axios.get(
+        `${this.baseUrl}/tickets/${ticketId}/comments.json`,
+        {
+          headers: {
+            'Authorization': `Basic ${this.auth}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+
+      return { comments: response.data.comments || [] };
+    } catch (error) {
+      logger.error('Zendesk Kommentare Fehler', { ticketId, error: error.message });
+      return { comments: [], error: error.message };
+    }
+  }
+
+  /**
+   * ECHTE Kundenaktivität erkennen (keine Automatisierung)
+   * Filtert nach: echten E-Mails, Telefonaten, Web-Eingaben
+   */
+  async getRealCustomerActivity(email, daysSince = 30) {
+    if (!this.isConfigured()) return { activities: [], lastRealContact: null };
+
+    try {
+      const { tickets } = await this.getCustomerTickets(email);
+      const cutoffDate = new Date();
+      cutoffDate.setDate(cutoffDate.getDate() - daysSince);
+
+      const realActivities = [];
+
+      for (const ticket of tickets) {
+        // Prüfe Via-Channel - nur echte Kanäle
+        const isRealChannel = ['email', 'web', 'phone', 'chat', 'voice'].includes(ticket.via?.channel);
+        const isNotAutomated = !['api', 'trigger', 'automation', 'rule'].includes(ticket.via?.channel);
+        
+        if (isRealChannel && isNotAutomated) {
+          // Hole Kommentare um echte Antworten zu finden
+          const { comments } = await this.getTicketComments(ticket.id);
+          
+          for (const comment of comments) {
+            const commentDate = new Date(comment.created_at);
+            if (commentDate < cutoffDate) continue;
+
+            // Ist es ein öffentlicher Kommentar vom Kunden (nicht Agent)?
+            const isPublic = comment.public === true;
+            const isFromCustomer = comment.via?.channel === 'email' || 
+                                   (comment.author_id && !comment.via?.source?.from?.address?.includes('maklerplan'));
+            const isRealComment = !['api', 'trigger', 'automation'].includes(comment.via?.channel);
+
+            if (isPublic && isRealComment) {
+              realActivities.push({
+                type: comment.via?.channel || 'unknown',
+                ticketId: ticket.id,
+                ticketSubject: ticket.subject,
+                date: comment.created_at,
+                isFromCustomer,
+                preview: comment.plain_body?.substring(0, 100) || ''
+              });
+            }
+          }
+        }
+
+        // Telefonate erkennen (Channel = voice/phone)
+        if (ticket.via?.channel === 'voice' || ticket.via?.channel === 'phone') {
+          realActivities.push({
+            type: 'phone_call',
+            ticketId: ticket.id,
+            ticketSubject: ticket.subject,
+            date: ticket.created_at,
+            isFromCustomer: true,
+            preview: 'Telefonat'
+          });
+        }
+      }
+
+      // Sortieren nach Datum (neueste zuerst)
+      realActivities.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+      return {
+        email,
+        activities: realActivities,
+        totalReal: realActivities.length,
+        lastRealContact: realActivities[0]?.date || null,
+        daysSinceLastContact: realActivities[0] 
+          ? Math.floor((Date.now() - new Date(realActivities[0].date)) / (1000 * 60 * 60 * 24))
+          : null,
+        isInactive: realActivities.length === 0 || 
+          (realActivities[0] && (Date.now() - new Date(realActivities[0].date)) > daysSince * 24 * 60 * 60 * 1000)
+      };
+    } catch (error) {
+      logger.error('Real Activity Check Fehler', { email, error: error.message });
+      return { activities: [], lastRealContact: null, error: error.message };
+    }
+  }
+
+  /**
+   * Inaktive Kunden finden (kein echter Kontakt seit X Tagen)
+   */
+  async findInactiveCustomers(emails, inactiveDays = 30) {
+    const inactive = [];
+    
+    for (const email of emails) {
+      const activity = await this.getRealCustomerActivity(email, inactiveDays);
+      if (activity.isInactive) {
+        inactive.push({
+          email,
+          daysSinceLastContact: activity.daysSinceLastContact,
+          lastContact: activity.lastRealContact
+        });
+      }
+    }
+
+    return {
+      total: emails.length,
+      inactive: inactive.length,
+      customers: inactive
+    };
+  }
 }
 
 export const zendeskService = new ZendeskService();

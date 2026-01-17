@@ -31,6 +31,7 @@ import schedulerRouter from './routes/scheduler.js';
 import leadquelleDashboardRouter from './routes/leadquelleDashboard.js';
 import summariesRouter from './routes/summaries.js';
 import productivityDashboardRouter from './routes/productivityDashboard.js';
+import salesAutomationRouter from './routes/salesAutomation.js';
 import { meetingSummaryService } from './services/meetingSummaryService.js';
 import { performanceMiddleware, getMetrics, getMemoryUsage } from './middleware/performance.js';
 import { cacheMiddleware, getCacheStats } from './middleware/cache.js';
@@ -185,6 +186,7 @@ app.use('/api/scheduler', schedulerRouter);
 app.use('/leadquelle', leadquelleDashboardRouter);
 app.use('/api/summaries', summariesRouter);
 app.use('/productivity', productivityDashboardRouter);
+app.use('/api/sales-automation', salesAutomationRouter);
 
 // Enhanced Webhook Routes
 app.post('/api/webhooks', async (req, res) => {
