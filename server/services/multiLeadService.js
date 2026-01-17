@@ -298,18 +298,15 @@ function getEmailTemplate(branch, lead) {
   
   <p>Beste Grüße,<br>
   <strong>Dominik Eisenhardt</strong><br>
-  Lead-Experte für ${branchConfig.name}</p>
+  Leadquelle Deutschland</p>
   
   <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
   
   <p style="font-size: 11px; color: #666;">
     <a href="{{optout_url}}" style="color: #999;">Keine weiteren E-Mails</a><br><br>
-    <strong>Maklerplan Pro GmbH</strong><br>
-    Französische Str. 20, 10117 Berlin | +49 30 219 25007<br>
-    HRB 264573 B, Amtsgericht Berlin<br><br>
-    <strong>Maklerplan GmbH</strong><br>
-    Grafenauweg 8, 6300 Zug, Schweiz | +41 41 510 61 00<br>
-    CHE-138.210.925<br>
+    <strong>Leadquelle Deutschland</strong><br>
+    Französische Str. 20, 10117 Berlin<br>
+    E-Mail: de@leadquelle.ai<br>
     Geschäftsführer: Dominik Eisenhardt
   </p>
 </div>
@@ -324,7 +321,8 @@ function getEmailTemplate(branch, lead) {
 class MultiLeadService {
   constructor() {
     this.apiKey = process.env.GOOGLE_PLACES_API_KEY;
-    this.bookingUrl = process.env.MULTI_BOOKING_URL || 'https://booking.maklerplan.com/analyse';
+    this.bookingUrl = process.env.MULTI_BOOKING_URL || 'https://booking.leadquelle.ai/analyse';
+    this.fromEmail = process.env.LEADQUELLE_EMAIL || 'de@leadquelle.ai';
     this.minRating = 3.5; // Niedrigere Schwelle für breitere Zielgruppe
     this.initData();
   }
@@ -511,10 +509,12 @@ class MultiLeadService {
       .replace('{{booking_url}}', `${baseUrl}/api/multi-leads/track/${bookingToken}?redirect=${encodeURIComponent(this.bookingUrl)}`)
       .replace('{{optout_url}}', `${baseUrl}/api/multi-leads/optout/${optoutToken}`);
 
+    // E-Mail senden (über Leadquelle Account wenn konfiguriert)
     await emailService.sendEmail({
       to: lead.email,
       subject: template.subject,
-      body: body
+      body: body,
+      from: this.fromEmail // de@leadquelle.ai
     });
 
     // Status aktualisieren
