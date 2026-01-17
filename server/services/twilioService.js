@@ -286,6 +286,86 @@ class TwilioService {
       return null;
     }
   }
+
+  /**
+   * Geo Permissions für SMS abrufen
+   */
+  async getSmsPermissions() {
+    if (!this.isConfigured()) return null;
+
+    try {
+      const permissions = await this.client.messaging.v1.services.list({ limit: 20 });
+      
+      // Alternativ: Direkt die erlaubten Länder abfragen
+      const countries = await this.client.messaging.v1.deactivations.fetch().catch(() => null);
+      
+      return {
+        services: permissions.map(s => ({ sid: s.sid, friendlyName: s.friendlyName })),
+        note: 'SMS permissions depend on account settings in Twilio Console'
+      };
+    } catch (error) {
+      logger.error('SMS Permissions Fehler', { error: error.message });
+      return { error: error.message };
+    }
+  }
+
+  /**
+   * Geo Permissions für Voice abrufen
+   */
+  async getVoicePermissions() {
+    if (!this.isConfigured()) return null;
+
+    try {
+      // Voice Geo Permissions
+      const permissions = await this.client.voice.v1.dialingPermissions.countries.list({ limit: 300 });
+      
+      const enabled = permissions.filter(p => p.lowRiskNumbersEnabled || p.highRiskSpecialNumbersEnabled);
+      
+      return {
+        total: permissions.length,
+        enabled: enabled.length,
+        countries: enabled.map(p => ({
+          code: p.isoCode,
+          name: p.name,
+          lowRisk: p.lowRiskNumbersEnabled,
+          highRisk: p.highRiskSpecialNumbersEnabled,
+          highRiskTollFraud: p.highRiskTollfraudNumbersEnabled
+        }))
+      };
+    } catch (error) {
+      logger.error('Voice Permissions Fehler', { error: error.message });
+      return { error: error.message };
+    }
+  }
+
+  /**
+   * Phone Number Capabilities
+   */
+  async getPhoneCapabilities() {
+    if (!this.isConfigured() || !TWILIO_PHONE_NUMBER) return null;
+
+    try {
+      const numbers = await this.client.incomingPhoneNumbers.list({ phoneNumber: TWILIO_PHONE_NUMBER });
+      
+      if (numbers.length === 0) return { error: 'Phone number not found' };
+
+      const number = numbers[0];
+      return {
+        phoneNumber: number.phoneNumber,
+        friendlyName: number.friendlyName,
+        capabilities: number.capabilities,
+        smsEnabled: number.capabilities?.sms || false,
+        voiceEnabled: number.capabilities?.voice || false,
+        mmsEnabled: number.capabilities?.mms || false,
+        country: number.phoneNumber.startsWith('+41') ? 'CH' : 
+                 number.phoneNumber.startsWith('+49') ? 'DE' : 
+                 number.phoneNumber.startsWith('+43') ? 'AT' : 'Unknown'
+      };
+    } catch (error) {
+      logger.error('Phone Capabilities Fehler', { error: error.message });
+      return { error: error.message };
+    }
+  }
 }
 
 export const twilioService = new TwilioService();

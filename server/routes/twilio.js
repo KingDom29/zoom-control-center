@@ -20,6 +20,24 @@ router.get('/status', async (req, res) => {
   });
 });
 
+// Phone Capabilities
+router.get('/capabilities', async (req, res) => {
+  const capabilities = await twilioService.getPhoneCapabilities();
+  res.json(capabilities);
+});
+
+// Voice Geo Permissions (welche Länder für Anrufe freigeschaltet)
+router.get('/permissions/voice', async (req, res) => {
+  const permissions = await twilioService.getVoicePermissions();
+  res.json(permissions);
+});
+
+// SMS Permissions
+router.get('/permissions/sms', async (req, res) => {
+  const permissions = await twilioService.getSmsPermissions();
+  res.json(permissions);
+});
+
 // ============================================
 // SMS
 // ============================================
