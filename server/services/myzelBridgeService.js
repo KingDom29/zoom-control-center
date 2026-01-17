@@ -314,6 +314,147 @@ class MyzelBridgeService {
       return null;
     }
   }
+
+  // ============================================
+  // READINESS & CALL OPTIMIZATION
+  // ============================================
+
+  /**
+   * Holt Makler-Readiness Score für optimales Timing
+   * @param {string} bexioNr - Makler Bexio-Nummer
+   * @returns {Promise<Object>} Readiness-Daten
+   */
+  async getMaklerReadiness(bexioNr) {
+    try {
+      logger.info('📊 Hole Makler Readiness', { bexioNr });
+
+      const response = await axios.get(`${this.baseUrl}/makler-readiness/${bexioNr}`, {
+        timeout: 10000
+      });
+
+      const result = response.data;
+
+      logger.info('📊 Makler Readiness', {
+        bexioNr,
+        readinessScore: result.readiness_score,
+        status: result.status,
+        bestTime: result.best_hours
+      });
+
+      return {
+        bexioNr: result.bexio_nr,
+        readinessScore: result.readiness_score,
+        status: result.status, // 'ready', 'busy', 'inactive', 'blocked'
+        components: {
+          capacity: result.components?.capacity,
+          activity: result.components?.activity,
+          performance: result.components?.performance,
+          trust: result.components?.trust,
+          payment: result.components?.payment
+        },
+        openLeads: result.open_leads,
+        maxCapacity: result.max_capacity,
+        lastActivity: result.last_activity,
+        bestDay: result.best_day,
+        bestHours: result.best_hours,
+        // Computed helpers
+        isReady: result.status === 'ready' && result.readiness_score >= 0.6,
+        shouldCall: result.status === 'ready' && result.readiness_score >= 0.7
+      };
+
+    } catch (error) {
+      logger.error('Makler Readiness Fehler', { 
+        bexioNr, 
+        error: error.response?.data || error.message 
+      });
+      
+      // Fallback: Assume ready if service unavailable
+      return {
+        bexioNr,
+        readinessScore: null,
+        status: 'unknown',
+        components: {},
+        isReady: true, // Optimistic fallback
+        shouldCall: true,
+        error: error.message
+      };
+    }
+  }
+
+  /**
+   * Sendet Call-Outcome für Machine Learning
+   * @param {Object} data - Outcome-Daten
+   * @param {string} data.bexioNr - Makler Bexio-Nummer
+   * @param {string} data.callId - Call-ID (Twilio SID oder intern)
+   * @param {string} data.outcome - 'interested', 'not_interested', 'no_answer', 'callback', 'sold'
+   * @param {number} data.durationSeconds - Call-Dauer
+   * @param {string} data.scheduledFollowup - Optional: Nächster Termin
+   * @param {string} data.notes - Optional: Notizen
+   */
+  async sendCallOutcome(data) {
+    try {
+      logger.info('📞 Sende Call Outcome', { 
+        bexioNr: data.bexioNr, 
+        outcome: data.outcome 
+      });
+
+      const response = await axios.post(`${this.baseUrl}/webhook/call-outcome`, {
+        bexio_nr: data.bexioNr,
+        call_id: data.callId,
+        outcome: data.outcome,
+        duration_seconds: data.durationSeconds,
+        scheduled_followup: data.scheduledFollowup,
+        notes: data.notes,
+        timestamp: new Date().toISOString()
+      }, { timeout: 10000 });
+
+      logger.info('📞 Call Outcome gespeichert', { 
+        bexioNr: data.bexioNr,
+        success: response.data?.success 
+      });
+
+      return response.data;
+    } catch (error) {
+      logger.error('Call Outcome Fehler', { 
+        bexioNr: data.bexioNr,
+        error: error.response?.data || error.message 
+      });
+      return null;
+    }
+  }
+
+  /**
+   * Kombinierte Prüfung: Assignment + Readiness
+   * Für den Auto-Zoom-Call Flow
+   */
+  async checkForAutoCall(bexioNr, leadData = null) {
+    const [assignment, readiness] = await Promise.all([
+      this.checkBeforeAssignment(bexioNr, leadData),
+      this.getMaklerReadiness(bexioNr)
+    ]);
+
+    const canAutoCall = assignment.canAssign && readiness.shouldCall;
+
+    return {
+      bexioNr,
+      canAutoCall,
+      assignment: {
+        canAssign: assignment.canAssign,
+        fraudScore: assignment.fraudScore,
+        billingStatus: assignment.billingStatus,
+        recommendation: assignment.recommendation
+      },
+      readiness: {
+        score: readiness.readinessScore,
+        status: readiness.status,
+        bestDay: readiness.bestDay,
+        bestHours: readiness.bestHours
+      },
+      recommendation: canAutoCall
+        ? `✅ Auto-Call möglich! Beste Zeit: ${readiness.bestDay} ${readiness.bestHours}`
+        : `❌ Kein Auto-Call: ${!assignment.canAssign ? 'Assignment blocked' : 'Not ready'}`
+    };
+  }
 }
 
 export const myzelBridgeService = new MyzelBridgeService();
