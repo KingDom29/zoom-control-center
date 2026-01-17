@@ -724,4 +724,31 @@ router.post('/action/call-outcome/:contactId', async (req, res) => {
   }
 });
 
+// ============================================
+// IMPORT / SYNC
+// ============================================
+
+// Zendesk Import
+router.post('/import/zendesk', async (req, res) => {
+  try {
+    const { limit = 100, brand = 'maklerplan' } = req.body;
+    const result = await unifiedContactService.importFromZendesk({ limit, brand });
+    res.json(result);
+  } catch (error) {
+    logger.error('Zendesk Import Route Fehler', { error: error.message });
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Legacy Migration (alte Leads importieren)
+router.post('/import/legacy', async (req, res) => {
+  try {
+    const { source, contacts } = req.body;
+    const result = await unifiedContactService.migrateFromLegacy(source, contacts);
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 export default router;

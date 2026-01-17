@@ -10,6 +10,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import crypto from 'crypto';
 import logger from '../../utils/logger.js';
+import { zendeskService } from '../zendeskService.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -522,6 +523,119 @@ class UnifiedContactService {
       'opted_out': STAGES.LOST
     };
     return mapping[status] || STAGES.LEAD;
+  }
+
+  /**
+   * Importiert Kontakte aus Zendesk
+   */
+  async importFromZendesk(options = {}) {
+    const { limit = 100, brand = 'maklerplan' } = options;
+    
+    logger.info('🔄 Starte Zendesk Import...');
+    
+    let imported = 0;
+    let updated = 0;
+    let skipped = 0;
+
+    try {
+      // Zendesk Users abrufen
+      const users = await zendeskService.searchUsers('*', limit);
+      
+      for (const user of users) {
+        if (!user.email) {
+          skipped++;
+          continue;
+        }
+
+        // Prüfe ob Kontakt schon existiert
+        const existing = this.getContactByEmail(user.email);
+        
+        const contactData = {
+          email: user.email,
+          firstName: user.name?.split(' ')[0] || '',
+          lastName: user.name?.split(' ').slice(1).join(' ') || '',
+          company: user.organization?.name || '',
+          phone: user.phone || '',
+          source: SOURCES.ZENDESK,
+          brand,
+          zendeskId: user.id,
+          tags: user.tags || [],
+          stage: this.mapZendeskTags(user.tags)
+        };
+
+        if (existing) {
+          // Update nur wenn Zendesk neuere Daten hat
+          this.updateContact(existing.id, {
+            zendeskId: user.id,
+            phone: user.phone || existing.phone,
+            tags: [...new Set([...(existing.tags || []), ...(user.tags || [])])]
+          });
+          updated++;
+        } else {
+          this.upsertContact(contactData);
+          imported++;
+        }
+      }
+
+      // Zendesk Tickets abrufen für mehr Kontext
+      const tickets = await zendeskService.getTickets({ limit: 200 });
+      
+      for (const ticket of tickets) {
+        if (!ticket.requester?.email) continue;
+        
+        const contact = this.getContactByEmail(ticket.requester.email);
+        if (contact) {
+          // Hat offene Tickets → höhere Priorität
+          if (ticket.status !== 'closed' && ticket.status !== 'solved') {
+            this.addInteraction(contact.id, {
+              type: 'ticket_open',
+              channel: 'zendesk',
+              data: { 
+                ticketId: ticket.id, 
+                subject: ticket.subject,
+                status: ticket.status,
+                priority: ticket.priority
+              }
+            });
+          }
+        }
+      }
+
+      logger.info('✅ Zendesk Import abgeschlossen', { imported, updated, skipped });
+      
+      return { 
+        success: true, 
+        imported, 
+        updated, 
+        skipped,
+        total: imported + updated
+      };
+
+    } catch (error) {
+      logger.error('Zendesk Import Fehler', { error: error.message });
+      return { success: false, error: error.message };
+    }
+  }
+
+  mapZendeskTags(tags = []) {
+    if (tags.includes('customer') || tags.includes('kunde')) return STAGES.CUSTOMER;
+    if (tags.includes('meeting_done')) return STAGES.MEETING_DONE;
+    if (tags.includes('meeting_scheduled')) return STAGES.MEETING_SCHEDULED;
+    if (tags.includes('interested') || tags.includes('interessiert')) return STAGES.CONTACTED;
+    if (tags.includes('contacted')) return STAGES.PROSPECT;
+    return STAGES.LEAD;
+  }
+
+  /**
+   * Kontakt nach Telefonnummer suchen
+   */
+  getContactByPhone(phone) {
+    if (!phone) return null;
+    const normalized = phone.replace(/[^0-9+]/g, '');
+    return Object.values(this.contacts).find(c => {
+      const cPhone = (c.phone || c.mobile || '').replace(/[^0-9+]/g, '');
+      return cPhone && (cPhone === normalized || cPhone.endsWith(normalized.slice(-9)) || normalized.endsWith(cPhone.slice(-9)));
+    });
   }
 }
 
