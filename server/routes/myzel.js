@@ -118,16 +118,106 @@ router.get('/check-assignment/:bexioNr', async (req, res) => {
 // WEBHOOKS (von Myzel empfangen)
 // ============================================
 
+/**
+ * Fraud Alert Webhook
+ * Empfängt Alerts wenn sich Fraud-Scores ändern
+ */
 router.post('/webhook/alert', async (req, res) => {
   try {
-    const { type, bexio_nr, message, severity } = req.body;
+    const { type, bexio_nr, message, severity, old_score, new_score } = req.body;
     
-    logger.warn('MYZEL ALERT empfangen', { type, bexio_nr, message, severity });
+    logger.warn('🚨 MYZEL FRAUD ALERT', { type, bexio_nr, message, severity, old_score, new_score });
     
-    // TODO: Hier könnte eine Aktion ausgelöst werden
-    // z.B. SMS an Admin, Lead-Zuweisung stoppen, etc.
+    // Bei High Risk: Aktionen auslösen
+    if (severity === 'high' || new_score > 50) {
+      logger.error(`⛔ HIGH RISK MAKLER: ${bexio_nr} - Score: ${new_score}`);
+      // TODO: Nurturing-E-Mails stoppen
+      // TODO: Task für Sales erstellen
+      // TODO: Admin benachrichtigen
+    }
     
-    res.json({ received: true, timestamp: new Date().toISOString() });
+    res.json({ 
+      received: true, 
+      action_taken: severity === 'high' ? 'escalated' : 'logged',
+      timestamp: new Date().toISOString() 
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * Daily Intelligence Webhook
+ * Empfängt das tägliche Morning Briefing von Myzel
+ */
+router.post('/webhook/daily-intel', async (req, res) => {
+  try {
+    const { 
+      high_priority,      // Makler die heute angerufen werden sollten
+      risky_maklers,      // Neue Risiko-Einschätzungen
+      billing_warnings,   // Zahlungsprobleme
+      new_opportunities,  // Neue Chancen
+      summary            // Zusammenfassung
+    } = req.body;
+    
+    logger.info('📊 DAILY INTELLIGENCE empfangen', {
+      high_priority_count: high_priority?.length || 0,
+      risky_count: risky_maklers?.length || 0,
+      billing_warnings_count: billing_warnings?.length || 0
+    });
+    
+    // Speichere für Dashboard-Anzeige
+    // TODO: In DB speichern für Morning Brief Widget
+    
+    res.json({ 
+      received: true,
+      processed: {
+        high_priority: high_priority?.length || 0,
+        risky_maklers: risky_maklers?.length || 0,
+        billing_warnings: billing_warnings?.length || 0
+      },
+      timestamp: new Date().toISOString() 
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * Payment Status Webhook
+ * Empfängt Updates wenn sich Zahlungsstatus ändert
+ */
+router.post('/webhook/payment', async (req, res) => {
+  try {
+    const { 
+      bexio_nr, 
+      event_type,        // 'payment_received', 'invoice_overdue', 'balance_low', 'balance_depleted'
+      old_balance,
+      new_balance,
+      leads_available,
+      message 
+    } = req.body;
+    
+    logger.info('💰 PAYMENT STATUS UPDATE', { bexio_nr, event_type, old_balance, new_balance });
+    
+    // Bei kritischen Events: Aktionen auslösen
+    if (event_type === 'balance_depleted') {
+      logger.warn(`⚠️ GUTHABEN AUFGEBRAUCHT: Makler ${bexio_nr}`);
+      // TODO: Lead-Zuweisung blockieren
+      // TODO: Erinnerungs-E-Mail senden
+    }
+    
+    if (event_type === 'invoice_overdue') {
+      logger.warn(`⚠️ RECHNUNG ÜBERFÄLLIG: Makler ${bexio_nr}`);
+      // TODO: In Risiko-Liste aufnehmen
+    }
+    
+    res.json({ 
+      received: true, 
+      event_type,
+      action_required: event_type === 'balance_depleted' || event_type === 'invoice_overdue',
+      timestamp: new Date().toISOString() 
+    });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
