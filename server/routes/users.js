@@ -1,7 +1,106 @@
 import express from 'express';
 import { zoomApi } from '../services/zoomAuth.js';
+import { teamActivityService } from '../services/teamActivityService.js';
+import logger from '../utils/logger.js';
 
 const router = express.Router();
+
+// ============================================
+// TEAM MANAGEMENT ROUTES
+// ============================================
+
+// Team-Übersicht mit allen Details
+router.get('/team/overview', async (req, res) => {
+  try {
+    const overview = await teamActivityService.getTeamOverview();
+    res.json(overview);
+  } catch (error) {
+    logger.error('Team Overview Fehler', { error: error.message });
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Team-Report generieren
+router.get('/team/report/:period', async (req, res) => {
+  try {
+    const { period } = req.params; // day, week, month
+    const report = await teamActivityService.generateTeamReport(period);
+    res.json(report);
+  } catch (error) {
+    logger.error('Team Report Fehler', { error: error.message });
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Team-Report per E-Mail senden
+router.post('/team/report/:period/send', async (req, res) => {
+  try {
+    const { period } = req.params;
+    const result = await teamActivityService.sendTeamReportEmail(period);
+    res.json(result);
+  } catch (error) {
+    logger.error('Team Report Send Fehler', { error: error.message });
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// User-Aktivität abrufen
+router.get('/:userId/activity', async (req, res) => {
+  try {
+    const { from, to } = req.query;
+    const activity = await teamActivityService.getUserActivity(req.params.userId, from, to);
+    res.json(activity);
+  } catch (error) {
+    logger.error('User Activity Fehler', { error: error.message });
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Zoom Rooms abrufen
+router.get('/rooms/list', async (req, res) => {
+  try {
+    const rooms = await teamActivityService.getRooms();
+    res.json(rooms);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Zoom Phone Users abrufen
+router.get('/phone/list', async (req, res) => {
+  try {
+    const phoneUsers = await teamActivityService.getPhoneUsers();
+    res.json(phoneUsers);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Phone zu User zuweisen
+router.post('/:userId/phone', async (req, res) => {
+  try {
+    const { phoneNumber } = req.body;
+    const result = await teamActivityService.assignPhoneToUser(req.params.userId, phoneNumber);
+    res.json({ success: true, result });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Room zu User zuweisen
+router.post('/:userId/room', async (req, res) => {
+  try {
+    const { roomId } = req.body;
+    const result = await teamActivityService.assignRoomToUser(req.params.userId, roomId);
+    res.json({ success: true, result });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================
+// STANDARD USER ROUTES
+// ============================================
 
 // Get all users
 router.get('/', async (req, res) => {

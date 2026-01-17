@@ -1,6 +1,7 @@
 import cron from 'node-cron';
 import { campaignService } from '../services/campaignService.js';
 import { sequenceEngine } from '../services/sequenceEngine.js';
+import { teamActivityService } from '../services/teamActivityService.js';
 import logger from '../utils/logger.js';
 
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
@@ -548,6 +549,39 @@ setTimeout(() => {
   runStartupCatchup().catch(e => logger.error('Catch-up failed', { error: e.message }));
 }, 5000);
 
+// ============================================
+// TEAM ACTIVITY REPORTS
+// ============================================
+
+// Team-Report Funktion
+async function runTeamReport(period = 'day') {
+  logger.info(`📊 Starte Team-Report (${period})...`);
+  try {
+    const result = await teamActivityService.sendTeamReportEmail(period);
+    logger.info(`✅ Team-Report gesendet`, { 
+      period, 
+      meetings: result.report.summary.totalMeetings,
+      to: result.emailSentTo 
+    });
+    return result;
+  } catch (error) {
+    logger.error('Team-Report Fehler', { error: error.message });
+    throw error;
+  }
+}
+
+// Täglicher Team-Report - Jeden Tag um 18:00 Uhr
+const dailyTeamReportJob = cron.schedule('0 18 * * *', async () => {
+  await runTeamReport('day');
+}, { timezone: 'Europe/Berlin' });
+logger.info('📊 Daily Team Report Job: Täglich 18:00 Uhr');
+
+// Wöchentlicher Team-Report - Jeden Freitag um 17:00 Uhr
+const weeklyTeamReportJob = cron.schedule('0 17 * * 5', async () => {
+  await runTeamReport('week');
+}, { timezone: 'Europe/Berlin' });
+logger.info('📊 Weekly Team Report Job: Freitags 17:00 Uhr');
+
 // Export für manuelle Ausführung und Status-Check
 export { 
   runCampaignBatch, campaignJob, 
@@ -561,5 +595,6 @@ export {
   runHotLeadScan, hotLeadJob,
   runMultiLeadSequences, multiLeadJob,
   runLeadquelleGeneration, leadquelleGenerationJob,
-  runStartupCatchup
+  runStartupCatchup,
+  runTeamReport, dailyTeamReportJob, weeklyTeamReportJob
 };
