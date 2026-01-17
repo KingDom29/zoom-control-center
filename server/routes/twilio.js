@@ -6,6 +6,9 @@
 import express from 'express';
 import { twilioService } from '../services/twilioService.js';
 import { unifiedContactService } from '../services/unified/unifiedContactService.js';
+import { openaiService } from '../services/openaiService.js';
+import { myzelBridgeService } from '../services/myzelBridgeService.js';
+import { closeService } from '../services/closeService.js';
 import logger from '../utils/logger.js';
 
 const router = express.Router();
@@ -489,9 +492,9 @@ router.all('/twiml/connect', (req, res) => {
   `);
 });
 
-// Recording Status Webhook
-router.post('/recording-status', (req, res) => {
-  const { RecordingSid, RecordingUrl, CallSid, RecordingStatus, RecordingDuration } = req.body;
+// Recording Status Webhook - Transkribiert und sendet an Zendesk Renew
+router.post('/recording-status', async (req, res) => {
+  const { RecordingSid, RecordingUrl, CallSid, RecordingStatus, RecordingDuration, From, To } = req.body;
   
   logger.info('📼 Recording Status', {
     callSid: CallSid,
@@ -501,9 +504,110 @@ router.post('/recording-status', (req, res) => {
     url: RecordingUrl
   });
 
-  // Hier könnte man die Recording-URL speichern
+  // Sofort 200 zurückgeben, Verarbeitung async
   res.sendStatus(200);
+
+  // Nur bei completed-Status weiterverarbeiten
+  if (RecordingStatus !== 'completed' || !RecordingUrl) return;
+
+  // Async: Transkribieren und an Renew senden
+  processRecordingForAnalysis({
+    callSid: CallSid,
+    recordingSid: RecordingSid,
+    recordingUrl: RecordingUrl,
+    duration: parseInt(RecordingDuration) || 0,
+    from: From,
+    to: To
+  }).catch(err => logger.error('Recording-Analyse fehlgeschlagen', { error: err.message }));
 });
+
+/**
+ * Verarbeitet Recording: Transkription + Deception-Analyse
+ */
+async function processRecordingForAnalysis({ callSid, recordingSid, recordingUrl, duration, from, to }) {
+  try {
+    // 1. Kontakt/Makler identifizieren
+    const contact = unifiedContactService.getContactByPhone?.(from) || unifiedContactService.getContactByPhone?.(to);
+    
+    // Bexio-Nr aus Close CRM suchen (falls Makler)
+    let bexioNr = contact?.bexioNr;
+    if (!bexioNr && contact?.closeLeadId) {
+      try {
+        const lead = await closeService.getLead(contact.closeLeadId);
+        bexioNr = lead?.custom?.[closeService.fields.BEXIO_ID] || lead?.custom?.[closeService.fields.MAKLER_ID];
+      } catch (e) {
+        logger.warn('Close Lead lookup failed', { error: e.message });
+      }
+    }
+
+    if (!bexioNr) {
+      logger.info('📼 Recording ohne Bexio-Nr - überspringe Deception-Analyse', { callSid });
+      return;
+    }
+
+    // 2. Recording von Twilio holen (mit Auth)
+    const twilioAuth = Buffer.from(
+      `${process.env.TWILIO_ACCOUNT_SID}:${process.env.TWILIO_AUTH_TOKEN}`
+    ).toString('base64');
+
+    // 3. Mit Whisper transkribieren
+    logger.info('🎤 Starte Whisper-Transkription...', { callSid, duration });
+    
+    const transcription = await openaiService.transcribeFromUrl(
+      `${recordingUrl}.mp3`,
+      { authHeader: `Basic ${twilioAuth}`, language: 'de' }
+    );
+
+    if (!transcription?.text) {
+      logger.warn('📼 Transkription leer', { callSid });
+      return;
+    }
+
+    logger.info('🎤 Transkription erfolgreich', { 
+      callSid, 
+      textLength: transcription.text.length,
+      duration: transcription.duration 
+    });
+
+    // 4. An Zendesk Renew zur Deception-Analyse senden
+    const analysisResult = await myzelBridgeService.analyzeCallRecording({
+      bexioNr,
+      callId: callSid,
+      transcript: transcription.text,
+      durationSeconds: duration,
+      direction: from === process.env.TWILIO_PHONE_NUMBER ? 'outbound' : 'inbound',
+      callerName: contact?.firstName ? `${contact.firstName} ${contact.lastName}` : null,
+      callTimestamp: new Date().toISOString()
+    });
+
+    if (analysisResult) {
+      logger.info('📞 Deception-Analyse abgeschlossen', {
+        callSid,
+        bexioNr,
+        deceptionScore: analysisResult.deception_score,
+        riskLevel: analysisResult.risk_level,
+        recommendation: analysisResult.recommendation
+      });
+
+      // Bei High Risk: Warnung loggen
+      if (analysisResult.risk_level === 'high' || analysisResult.deception_score > 0.7) {
+        logger.warn('⚠️ HIGH DECEPTION SCORE im Call!', {
+          bexioNr,
+          callSid,
+          score: analysisResult.deception_score,
+          patterns: analysisResult.patterns_detected
+        });
+      }
+    }
+
+  } catch (error) {
+    logger.error('Recording-Analyse Fehler', { 
+      callSid, 
+      error: error.message,
+      stack: error.stack?.substring(0, 500)
+    });
+  }
+}
 
 // SMS Status Webhook
 router.post('/sms-status', (req, res) => {

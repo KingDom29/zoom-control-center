@@ -180,6 +180,97 @@ Antworte nur mit den 3 Betreffzeilen, eine pro Zeile.`;
   }
 
   /**
+   * Transkribiert Audio mit Whisper API
+   * @param {Buffer|ReadableStream} audioData - Audio-Daten
+   * @param {Object} options - Optionen
+   * @returns {Promise<{text: string, language: string, duration: number}>}
+   */
+  async transcribeAudio(audioData, options = {}) {
+    if (!this.initialize()) {
+      throw new Error('OpenAI Service nicht initialisiert - OPENAI_API_KEY setzen');
+    }
+
+    const FormData = (await import('form-data')).default;
+    const formData = new FormData();
+    
+    // Audio-Datei hinzufügen
+    formData.append('file', audioData, {
+      filename: options.filename || 'audio.mp3',
+      contentType: options.contentType || 'audio/mpeg'
+    });
+    formData.append('model', 'whisper-1');
+    formData.append('language', options.language || 'de');
+    formData.append('response_format', 'verbose_json');
+    
+    if (options.prompt) {
+      formData.append('prompt', options.prompt);
+    }
+
+    const response = await fetch(`${this.baseUrl}/audio/transcriptions`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${this.apiKey}`,
+        ...formData.getHeaders()
+      },
+      body: formData
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: { message: response.statusText } }));
+      throw new Error(`Whisper API Error: ${error.error?.message || response.statusText}`);
+    }
+
+    const data = await response.json();
+    
+    logger.info('🎤 Audio transkribiert', { 
+      duration: data.duration,
+      language: data.language,
+      textLength: data.text?.length 
+    });
+
+    return {
+      text: data.text,
+      language: data.language,
+      duration: data.duration,
+      segments: data.segments
+    };
+  }
+
+  /**
+   * Transkribiert Audio von URL (z.B. Twilio Recording)
+   * @param {string} audioUrl - URL zur Audio-Datei
+   * @param {Object} options - Optionen
+   */
+  async transcribeFromUrl(audioUrl, options = {}) {
+    if (!this.initialize()) {
+      throw new Error('OpenAI Service nicht initialisiert');
+    }
+
+    logger.info('🎤 Lade Audio von URL...', { url: audioUrl.substring(0, 50) + '...' });
+
+    // Audio herunterladen
+    const audioResponse = await fetch(audioUrl, {
+      headers: options.authHeader ? { 'Authorization': options.authHeader } : {}
+    });
+
+    if (!audioResponse.ok) {
+      throw new Error(`Audio download failed: ${audioResponse.status} ${audioResponse.statusText}`);
+    }
+
+    const audioBuffer = Buffer.from(await audioResponse.arrayBuffer());
+    
+    // Dateityp aus URL oder Content-Type ermitteln
+    const contentType = audioResponse.headers.get('content-type') || 'audio/mpeg';
+    const extension = contentType.includes('wav') ? 'wav' : 'mp3';
+
+    return this.transcribeAudio(audioBuffer, {
+      ...options,
+      filename: `recording.${extension}`,
+      contentType
+    });
+  }
+
+  /**
    * Extrahiert Action Items aus Meeting-Transkript
    */
   async extractActionItems(transcript) {

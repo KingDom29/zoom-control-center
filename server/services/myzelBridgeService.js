@@ -174,21 +174,78 @@ class MyzelBridgeService {
   }
 
   /**
-   * Sendet Call-Recording zur Analyse
+   * Sendet Call-Recording mit Transkript zur Deception-Analyse
+   * @param {Object} data - Call-Daten
+   * @param {string} data.bexioNr - Makler Bexio-Nummer
+   * @param {string} data.callId - Twilio Call SID
+   * @param {string} data.transcript - Whisper-Transkript
+   * @param {number} data.durationSeconds - Call-Dauer in Sekunden
+   * @param {string} data.direction - 'inbound' oder 'outbound'
+   * @param {string} data.callerName - Name des Anrufers (optional)
+   * @param {string} data.calleeName - Name des Angerufenen (optional)
+   * @param {string} data.callTimestamp - Zeitpunkt des Calls
    */
   async analyzeCallRecording(data) {
     try {
-      const response = await axios.post(`${this.baseUrl}/webhook/ticket`, {
-        type: 'call_recording',
-        bexio_nr: data.bexioNr,
-        recording_url: data.recordingUrl,
-        call_duration: data.duration,
-        caller_phone: data.callerPhone,
-        timestamp: new Date().toISOString()
+      logger.info('📞 Sende Call zur Deception-Analyse', { 
+        bexioNr: data.bexioNr, 
+        callId: data.callId,
+        transcriptLength: data.transcript?.length 
       });
+
+      const response = await axios.post(`${this.baseUrl}/analyze-call`, {
+        bexio_nr: data.bexioNr,
+        call_id: data.callId,
+        transcript: data.transcript,
+        duration_seconds: data.durationSeconds,
+        direction: data.direction || 'outbound',
+        caller_name: data.callerName,
+        callee_name: data.calleeName,
+        call_timestamp: data.callTimestamp || new Date().toISOString()
+      }, { timeout: 30000 });
+
+      logger.info('📞 Call-Analyse Ergebnis', { 
+        callId: data.callId,
+        deceptionScore: response.data?.deception_score,
+        riskLevel: response.data?.risk_level
+      });
+
       return response.data;
     } catch (error) {
-      logger.error('Myzel Call-Analyse Fehler', { error: error.message });
+      logger.error('Myzel Call-Analyse Fehler', { 
+        callId: data.callId,
+        error: error.response?.data || error.message 
+      });
+      return null;
+    }
+  }
+
+  /**
+   * Sendet externes Signal an Zendesk Renew (z.B. M365 Anomalie)
+   * @param {Object} data - Signal-Daten
+   * @param {string} data.bexioNr - Betroffener Makler
+   * @param {string} data.source - Quelle ('m365', 'zendesk', 'twilio')
+   * @param {Object} data.context - Kontext-Daten
+   * @param {string} data.severity - Schweregrad
+   */
+  async sendExternalSignal(data) {
+    try {
+      logger.info('📡 Sende externes Signal an Renew', { 
+        bexioNr: data.bexioNr, 
+        source: data.source 
+      });
+
+      const response = await axios.post(`${this.baseUrl}/webhook/external-signal`, {
+        bexio_nr: data.bexioNr,
+        source: data.source,
+        context: data.context,
+        severity: data.severity || 'info',
+        timestamp: new Date().toISOString()
+      }, { timeout: 10000 });
+
+      return response.data;
+    } catch (error) {
+      logger.error('External Signal Fehler', { error: error.message });
       return null;
     }
   }
