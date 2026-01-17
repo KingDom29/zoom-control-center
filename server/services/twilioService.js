@@ -483,6 +483,136 @@ class TwilioService {
       return { error: error.message };
     }
   }
+
+  /**
+   * SIP Trunk Details abrufen
+   */
+  async getTrunkDetails(trunkSid) {
+    if (!this.isConfigured()) return null;
+
+    try {
+      const trunk = await this.client.trunking.v1.trunks(trunkSid).fetch();
+      
+      // Origination URIs (wohin Anrufe gehen)
+      const originationUris = await this.client.trunking.v1
+        .trunks(trunkSid)
+        .originationUrls.list();
+
+      // Phone Numbers die diesem Trunk zugewiesen sind
+      const phoneNumbers = await this.client.trunking.v1
+        .trunks(trunkSid)
+        .phoneNumbers.list();
+
+      return {
+        sid: trunk.sid,
+        friendlyName: trunk.friendlyName,
+        domainName: trunk.domainName,
+        recording: trunk.recording,
+        secure: trunk.secure,
+        authType: trunk.authType,
+        authTypeSet: trunk.authTypeSet,
+        
+        originationUris: originationUris.map(o => ({
+          sid: o.sid,
+          uri: o.sipUrl,
+          weight: o.weight,
+          priority: o.priority,
+          enabled: o.enabled,
+          friendlyName: o.friendlyName
+        })),
+        
+        phoneNumbers: phoneNumbers.map(p => ({
+          sid: p.sid,
+          phoneNumber: p.phoneNumber,
+          friendlyName: p.friendlyName
+        })),
+        
+        dateCreated: trunk.dateCreated,
+        dateUpdated: trunk.dateUpdated
+      };
+    } catch (error) {
+      logger.error('Trunk Details Fehler', { trunkSid, error: error.message });
+      return { error: error.message };
+    }
+  }
+
+  /**
+   * Nummer von Trunk trennen und auf unsere App umstellen
+   */
+  async configureForApp(webhookBaseUrl) {
+    if (!this.isConfigured() || !TWILIO_PHONE_NUMBER) return null;
+
+    try {
+      const numbers = await this.client.incomingPhoneNumbers.list({ phoneNumber: TWILIO_PHONE_NUMBER });
+      if (numbers.length === 0) return { error: 'Phone number not found' };
+
+      const numberSid = numbers[0].sid;
+      const currentTrunkSid = numbers[0].trunkSid;
+
+      // 1. Von Trunk trennen (wenn vorhanden)
+      if (currentTrunkSid) {
+        try {
+          await this.client.trunking.v1
+            .trunks(currentTrunkSid)
+            .phoneNumbers(numberSid)
+            .remove();
+          logger.info('📞 Nummer von Trunk getrennt', { trunkSid: currentTrunkSid });
+        } catch (e) {
+          logger.warn('Trunk Trennung fehlgeschlagen (evtl. nicht verknüpft)', { error: e.message });
+        }
+      }
+
+      // 2. Webhooks auf unsere App setzen
+      const updated = await this.client.incomingPhoneNumbers(numberSid).update({
+        voiceUrl: `${webhookBaseUrl}/api/twilio/voice/incoming`,
+        voiceMethod: 'POST',
+        voiceFallbackUrl: `${webhookBaseUrl}/api/twilio/voice/fallback`,
+        voiceFallbackMethod: 'POST',
+        statusCallback: `${webhookBaseUrl}/api/twilio/voice/status`,
+        statusCallbackMethod: 'POST',
+        smsUrl: `${webhookBaseUrl}/api/twilio/incoming-sms`,
+        smsMethod: 'POST',
+        smsFallbackUrl: '',
+        trunkSid: null // Explizit Trunk entfernen
+      });
+
+      logger.info('✅ Nummer auf App konfiguriert', { webhookBaseUrl });
+
+      return {
+        success: true,
+        phoneNumber: updated.phoneNumber,
+        voiceUrl: updated.voiceUrl,
+        smsUrl: updated.smsUrl,
+        previousTrunkSid: currentTrunkSid
+      };
+    } catch (error) {
+      logger.error('App Config Fehler', { error: error.message });
+      return { error: error.message };
+    }
+  }
+
+  /**
+   * Alle aktiven Calls abrufen
+   */
+  async getActiveCalls() {
+    if (!this.isConfigured()) return [];
+
+    try {
+      const calls = await this.client.calls.list({ status: 'in-progress', limit: 20 });
+      return calls.map(c => ({
+        sid: c.sid,
+        from: c.from,
+        to: c.to,
+        status: c.status,
+        direction: c.direction,
+        startTime: c.startTime,
+        duration: c.duration
+      }));
+    } catch (error) {
+      logger.error('Active Calls Fehler', { error: error.message });
+      return [];
+    }
+  }
 }
 
 export const twilioService = new TwilioService();

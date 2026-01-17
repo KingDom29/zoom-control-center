@@ -83,6 +83,130 @@ router.all('/twiml/forward', (req, res) => {
   `);
 });
 
+// SIP Trunk Details
+router.get('/trunk/:trunkSid', async (req, res) => {
+  const details = await twilioService.getTrunkDetails(req.params.trunkSid);
+  res.json(details);
+});
+
+// Nummer auf unsere App umstellen (von Trunk trennen)
+router.post('/configure-for-app', async (req, res) => {
+  try {
+    const webhookBaseUrl = req.body.webhookBaseUrl || process.env.PUBLIC_URL || 'https://zoom-control-center-production.up.railway.app';
+    const result = await twilioService.configureForApp(webhookBaseUrl);
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Aktive Calls
+router.get('/calls/active', async (req, res) => {
+  const calls = await twilioService.getActiveCalls();
+  res.json(calls);
+});
+
+// ============================================
+// VOICE WEBHOOKS (eingehende Anrufe)
+// ============================================
+
+// Eingehender Anruf - Haupthandler
+router.post('/voice/incoming', async (req, res) => {
+  const { From, To, CallSid, CallStatus } = req.body;
+  
+  logger.info('📞 Eingehender Anruf', { from: From, to: To, callSid: CallSid });
+
+  // Kontakt in DB suchen
+  const contact = unifiedContactService.getContactByPhone?.(From);
+  
+  if (contact) {
+    // Bekannter Kontakt - Interaction loggen
+    unifiedContactService.addInteraction(contact.id, {
+      type: 'call_received',
+      channel: 'phone',
+      direction: 'inbound',
+      data: { from: From, callSid: CallSid }
+    });
+  }
+
+  // TwiML Response - Optionen:
+  // 1. Direkt weiterleiten an Team
+  // 2. IVR Menü
+  // 3. Voicemail
+  
+  res.type('text/xml');
+  res.send(`
+    <?xml version="1.0" encoding="UTF-8"?>
+    <Response>
+      <Say language="de-DE">Willkommen bei Maklerplan. Bitte warten Sie, wir verbinden Sie.</Say>
+      <Dial timeout="30" callerId="${process.env.TWILIO_PHONE_NUMBER}" record="record-from-answer">
+        <!-- Hier Team-Nummern eintragen -->
+        <Number>+41791234567</Number>
+      </Dial>
+      <Say language="de-DE">Es konnte leider niemand erreicht werden. Bitte hinterlassen Sie eine Nachricht nach dem Signalton.</Say>
+      <Record maxLength="120" transcribe="true" transcribeCallback="/api/twilio/voice/transcription" />
+      <Say language="de-DE">Danke für Ihren Anruf. Auf Wiederhören.</Say>
+    </Response>
+  `);
+});
+
+// Fallback wenn Haupthandler fehlschlägt
+router.post('/voice/fallback', (req, res) => {
+  logger.error('📞 Voice Fallback ausgelöst', req.body);
+  
+  res.type('text/xml');
+  res.send(`
+    <?xml version="1.0" encoding="UTF-8"?>
+    <Response>
+      <Say language="de-DE">Es ist ein technischer Fehler aufgetreten. Bitte versuchen Sie es später erneut.</Say>
+      <Hangup />
+    </Response>
+  `);
+});
+
+// Call Status Updates
+router.post('/voice/status', (req, res) => {
+  const { CallSid, CallStatus, CallDuration, From, To } = req.body;
+  
+  logger.info('📞 Call Status', { callSid: CallSid, status: CallStatus, duration: CallDuration });
+
+  // Bei Anrufende: Contact updaten
+  if (CallStatus === 'completed' && CallDuration) {
+    const contact = unifiedContactService.getContactByPhone?.(From) || unifiedContactService.getContactByPhone?.(To);
+    if (contact) {
+      unifiedContactService.addInteraction(contact.id, {
+        type: 'call_completed',
+        channel: 'phone',
+        data: { callSid: CallSid, duration: CallDuration, status: CallStatus }
+      });
+    }
+  }
+
+  res.sendStatus(200);
+});
+
+// Voicemail Transcription
+router.post('/voice/transcription', (req, res) => {
+  const { TranscriptionText, RecordingUrl, From, CallSid } = req.body;
+  
+  logger.info('📝 Voicemail Transcription', { from: From, text: TranscriptionText });
+
+  // Zendesk Ticket für Voicemail erstellen
+  if (TranscriptionText) {
+    const contact = unifiedContactService.getContactByPhone?.(From);
+    
+    // TODO: Zendesk Ticket erstellen
+    logger.info('📝 Voicemail von', { 
+      from: From, 
+      contact: contact?.email,
+      text: TranscriptionText,
+      recording: RecordingUrl 
+    });
+  }
+
+  res.sendStatus(200);
+});
+
 // ============================================
 // SMS
 // ============================================
