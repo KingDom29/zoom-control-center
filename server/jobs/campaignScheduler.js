@@ -7,6 +7,7 @@ import { salesAutomationService } from '../services/salesAutomationService.js';
 import { pipelineService } from '../services/unified/pipelineService.js';
 import { callManagerService } from '../services/unified/callManagerService.js';
 import { teamAssignmentService } from '../services/unified/teamAssignmentService.js';
+import { twilioService } from '../services/twilioService.js';
 import logger from '../utils/logger.js';
 
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
@@ -793,6 +794,107 @@ const teamRecommendationsJob = cron.schedule('0 8 * * 1-5', async () => {
 }, { timezone: 'Europe/Berlin' });
 logger.info('📧 Team Recommendations Job: Werktags 8:00 Uhr');
 
+// ============================================
+// TWILIO BUNDLE CHECKER
+// ============================================
+
+// Konfiguration für ausstehende DE-Nummern
+const PENDING_DE_NUMBERS = {
+  leadquelle: {
+    addressSid: 'AD727df04e10f64c56ca02779d295bf878',
+    company: 'Leadquelle GmbH',
+    targetNumber: '+493021924667', // Berlin
+    purchased: false
+  },
+  maklerplanPro: {
+    addressSid: 'AD8a6c3acf3fa1799bf4c80af30edf79e7',
+    company: 'Maklerplan Pro GmbH',
+    targetNumber: '+499119664099', // Nürnberg (zweite Option)
+    purchased: false
+  }
+};
+
+async function runTwilioBundleChecker() {
+  logger.info('📱 Prüfe Twilio Bundle Status für DE-Nummern...');
+  
+  try {
+    // Bundles abrufen
+    const bundles = await twilioService.listBundles();
+    
+    if (bundles.error) {
+      logger.error('Bundle-Abruf fehlgeschlagen', { error: bundles.error });
+      return { success: false, error: bundles.error };
+    }
+
+    const results = {
+      bundlesChecked: bundles.length,
+      approvedBundles: [],
+      numbersPurchased: []
+    };
+
+    // Prüfe auf neue approved Bundles für DE
+    for (const bundle of bundles) {
+      if (bundle.status === 'twilio-approved' && bundle.isoCountry === 'DE') {
+        results.approvedBundles.push({
+          sid: bundle.sid,
+          name: bundle.friendlyName,
+          country: bundle.isoCountry
+        });
+
+        // Versuche Nummer zu kaufen wenn noch nicht gekauft
+        for (const [key, config] of Object.entries(PENDING_DE_NUMBERS)) {
+          if (config.purchased) continue;
+
+          // Prüfe ob Bundle zur Firma passt
+          const bundleNameLower = bundle.friendlyName.toLowerCase();
+          const companyLower = config.company.toLowerCase();
+          
+          if (bundleNameLower.includes('leadquelle') || bundleNameLower.includes('maklerplan')) {
+            logger.info(`🎉 Approved Bundle gefunden: ${bundle.friendlyName}`);
+            
+            // Nummer kaufen
+            const webhookBaseUrl = process.env.PUBLIC_URL || 'https://zoom-control-center-production.up.railway.app';
+            const purchaseResult = await twilioService.purchaseNumberWithBundle(
+              config.targetNumber,
+              bundle.sid,
+              config.addressSid,
+              webhookBaseUrl
+            );
+
+            if (purchaseResult.success) {
+              logger.info(`✅ DE-Nummer gekauft: ${purchaseResult.phoneNumber} für ${config.company}`);
+              PENDING_DE_NUMBERS[key].purchased = true;
+              results.numbersPurchased.push({
+                company: config.company,
+                phoneNumber: purchaseResult.phoneNumber
+              });
+            } else {
+              logger.warn(`Nummernkauf fehlgeschlagen: ${purchaseResult.error}`);
+            }
+          }
+        }
+      }
+    }
+
+    logger.info('📱 Bundle-Check abgeschlossen', { 
+      bundlesChecked: results.bundlesChecked,
+      approved: results.approvedBundles.length,
+      purchased: results.numbersPurchased.length
+    });
+
+    return results;
+  } catch (error) {
+    logger.error('Twilio Bundle Checker Fehler', { error: error.message });
+    return { success: false, error: error.message };
+  }
+}
+
+// Alle 4 Stunden prüfen ob Bundles approved wurden
+const twilioBundleJob = cron.schedule('0 */4 * * *', async () => {
+  await runTwilioBundleChecker();
+}, { timezone: 'Europe/Berlin' });
+logger.info('📱 Twilio Bundle Checker: Alle 4 Stunden');
+
 // Export für manuelle Ausführung und Status-Check
 export { 
   runCampaignBatch, campaignJob, 
@@ -816,5 +918,6 @@ export {
   runDealClosers, dealCloserJob,
   runUnifiedSequences, unifiedSequenceJob,
   runDailyCallManager, callManagerJob,
-  runTeamRecommendations, teamRecommendationsJob
+  runTeamRecommendations, teamRecommendationsJob,
+  runTwilioBundleChecker, twilioBundleJob
 };
