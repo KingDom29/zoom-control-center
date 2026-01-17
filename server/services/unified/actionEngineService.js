@@ -16,9 +16,11 @@ import { fileURLToPath } from 'url';
 import { zoomApi } from '../zoomAuth.js';
 import { emailService } from '../emailService.js';
 import { zendeskService } from '../zendeskService.js';
+import { twilioService } from '../twilioService.js';
 import { unifiedContactService, STAGES } from './unifiedContactService.js';
 import { brandingService } from './brandingService.js';
 import { communicationService } from './communicationService.js';
+import { callManagerService } from './callManagerService.js';
 import logger from '../../utils/logger.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -471,6 +473,206 @@ class ActionEngineService {
     return this.actionHistory
       .filter(a => !contactId || a.contactId === contactId)
       .slice(-limit);
+  }
+
+  // ============================================
+  // ONE-CLICK ANRUF MIT TWILIO
+  // ============================================
+
+  /**
+   * Komplette Empfehlung mit One-Click Button
+   * Gibt Analyse + ausführbare Aktionen zurück
+   */
+  async getRecommendationWithActions(contactId) {
+    const analysis = await callManagerService.analyzeContact(contactId);
+    if (!analysis || analysis.callPriority === 'none') {
+      return null;
+    }
+
+    const contact = analysis.contact;
+    const brand = brandingService.getBrand(contact.activeBrand);
+
+    return {
+      contactId,
+      name: `${contact.firstName} ${contact.lastName}`,
+      company: contact.company,
+      phone: contact.mobile || contact.phone,
+      email: contact.email,
+      brand: brand.name,
+      brandColors: brand.colors,
+      
+      // Analyse
+      priority: analysis.callPriority,
+      score: analysis.score,
+      recommendation: analysis.recommendation,
+      reasons: analysis.reasons.map(r => callManagerService.getReasonText(r)),
+      bestTime: analysis.bestTimeToCall,
+      lastContact: analysis.lastContact,
+
+      // One-Click Actions
+      actions: {
+        call: {
+          label: '📞 Jetzt anrufen',
+          description: 'Startet Anruf über Twilio',
+          endpoint: `/api/unified/action/call/${contactId}`
+        },
+        smsFirst: {
+          label: '💬 SMS + Anrufen',
+          description: 'SMS senden, dann anrufen',
+          endpoint: `/api/unified/action/sms-then-call/${contactId}`
+        },
+        sendProposal: {
+          label: '📅 Terminvorschlag senden',
+          description: 'E-Mail mit 3 Terminoptionen',
+          endpoint: `/api/unified/action/meeting-proposal/${contactId}`
+        },
+        createTask: {
+          label: '📋 Zendesk Aufgabe',
+          description: 'Anruf-Task in Zendesk',
+          endpoint: `/api/unified/action/create-task/${contactId}`
+        },
+        skip: {
+          label: '⏭️ Überspringen',
+          description: 'Nächste Empfehlung anzeigen',
+          endpoint: `/api/unified/action/skip/${contactId}`
+        }
+      }
+    };
+  }
+
+  /**
+   * ONE-CLICK: Anruf starten über Twilio
+   */
+  async initiateCall(contactId, agentPhone) {
+    const contact = unifiedContactService.getContact(contactId);
+    if (!contact) throw new Error('Contact not found');
+
+    const phone = contact.mobile || contact.phone;
+    if (!phone) throw new Error('No phone number');
+
+    // Anruf über Twilio initiieren
+    const callResult = await twilioService.initiateCall(phone, agentPhone);
+
+    if (callResult.success) {
+      // Interaction loggen
+      unifiedContactService.addInteraction(contactId, {
+        type: 'call_initiated',
+        channel: 'phone',
+        direction: 'outbound',
+        data: { callSid: callResult.callSid, to: phone }
+      });
+
+      this.logAction(contactId, 'call_initiated', { callSid: callResult.callSid });
+
+      logger.info('📞 Anruf gestartet', { contactId, phone, callSid: callResult.callSid });
+    }
+
+    return callResult;
+  }
+
+  /**
+   * ONE-CLICK: SMS senden, dann anrufen
+   */
+  async smsThenCall(contactId, agentPhone) {
+    const contact = unifiedContactService.getContact(contactId);
+    if (!contact) throw new Error('Contact not found');
+
+    const phone = contact.mobile || contact.phone;
+    const brand = brandingService.getBrand(contact.activeBrand);
+
+    // 1. SMS senden
+    const smsText = `Hallo ${contact.firstName}, hier ist ${brand.name}. Ich rufe Sie gleich kurz an. Passt es gerade?`;
+    
+    const smsResult = await twilioService.sendSMS(phone, smsText);
+    
+    this.logAction(contactId, 'sms_before_call', { message: smsText });
+
+    // 2. Nach 30 Sekunden anrufen (oder sofort wenn Agent will)
+    const callResult = await twilioService.initiateCall(phone, agentPhone);
+
+    unifiedContactService.addInteraction(contactId, {
+      type: 'sms_then_call',
+      channel: 'phone',
+      data: { smsSid: smsResult.sid, callSid: callResult.callSid }
+    });
+
+    return {
+      sms: smsResult,
+      call: callResult
+    };
+  }
+
+  /**
+   * Top Empfehlungen für Dashboard abrufen
+   */
+  async getTopRecommendations(limit = 5) {
+    const callList = await callManagerService.generateCallList({ limit, minPriority: 'medium' });
+    
+    const recommendations = [];
+    for (const call of callList.calls) {
+      const rec = await this.getRecommendationWithActions(call.contactId);
+      if (rec) recommendations.push(rec);
+    }
+
+    return {
+      date: new Date().toISOString(),
+      count: recommendations.length,
+      recommendations
+    };
+  }
+
+  /**
+   * Feedback nach Anruf erfassen (für Learning)
+   */
+  async recordCallOutcome(contactId, outcome) {
+    const { result, duration, notes, nextAction } = outcome;
+
+    // Feedback an Learning System
+    const contact = unifiedContactService.getContact(contactId);
+    const analysis = await callManagerService.analyzeContact(contactId);
+    
+    if (analysis && analysis.reasons.length > 0) {
+      // Hauptgrund für Empfehlung
+      const mainReason = analysis.reasons[0].reason;
+      
+      this.submitFeedback({
+        contactId,
+        reason: mainReason,
+        outcome: result, // 'successful', 'no_answer', 'not_interested', etc.
+        notes,
+        callDuration: duration
+      });
+    }
+
+    // Stage basierend auf Ergebnis updaten
+    const stageMap = {
+      'meeting_scheduled': STAGES.MEETING_SCHEDULED,
+      'interested': STAGES.CONTACTED,
+      'callback': STAGES.CONTACTED,
+      'not_interested': STAGES.LOST,
+      'no_answer': null // Stage bleibt
+    };
+
+    if (stageMap[result]) {
+      unifiedContactService.updateStage(contactId, stageMap[result], `Call outcome: ${result}`);
+    }
+
+    // Next Action ausführen wenn angegeben
+    if (nextAction === 'send_proposal') {
+      await this.sendMeetingProposal(contactId);
+    } else if (nextAction === 'create_callback') {
+      await zendeskService.createTicket({
+        subject: `📞 Rückruf: ${contact.company || contact.firstName}`,
+        description: `Rückruf vereinbart.\nNotizen: ${notes || '-'}`,
+        priority: 'high',
+        type: 'task',
+        requesterEmail: contact.email
+      });
+    }
+
+    this.logAction(contactId, 'call_outcome', outcome);
+
+    return { success: true, outcome };
   }
 }
 

@@ -16,6 +16,7 @@ import {
   SEQUENCE_TEMPLATES,
   PRIORITY
 } from '../services/unified/index.js';
+import { zendeskService } from '../services/zendeskService.js';
 import logger from '../utils/logger.js';
 
 const router = express.Router();
@@ -600,6 +601,127 @@ router.get('/book-slot', async (req, res) => {
 router.get('/action/history', (req, res) => {
   const history = actionEngineService.getActionHistory(req.query.contactId, parseInt(req.query.limit) || 20);
   res.json(history);
+});
+
+// ============================================
+// ONE-CLICK ACTIONS
+// ============================================
+
+// Top Empfehlungen mit Actions
+router.get('/recommendations', async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit) || 5;
+    const recommendations = await actionEngineService.getTopRecommendations(limit);
+    res.json(recommendations);
+  } catch (error) {
+    logger.error('Recommendations Fehler', { error: error.message });
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Einzelne Empfehlung mit Actions
+router.get('/recommendation/:contactId', async (req, res) => {
+  try {
+    const rec = await actionEngineService.getRecommendationWithActions(req.params.contactId);
+    if (!rec) {
+      return res.status(404).json({ error: 'Keine Empfehlung für diesen Kontakt' });
+    }
+    res.json(rec);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ONE-CLICK: Anruf starten
+router.post('/action/call/:contactId', async (req, res) => {
+  try {
+    const { agentPhone } = req.body;
+    if (!agentPhone) {
+      return res.status(400).json({ error: 'agentPhone required' });
+    }
+    const result = await actionEngineService.initiateCall(req.params.contactId, agentPhone);
+    res.json(result);
+  } catch (error) {
+    logger.error('Call Action Fehler', { error: error.message });
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ONE-CLICK: SMS dann Anruf
+router.post('/action/sms-then-call/:contactId', async (req, res) => {
+  try {
+    const { agentPhone } = req.body;
+    if (!agentPhone) {
+      return res.status(400).json({ error: 'agentPhone required' });
+    }
+    const result = await actionEngineService.smsThenCall(req.params.contactId, agentPhone);
+    res.json(result);
+  } catch (error) {
+    logger.error('SMS+Call Action Fehler', { error: error.message });
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ONE-CLICK: Terminvorschlag senden
+router.post('/action/meeting-proposal/:contactId', async (req, res) => {
+  try {
+    const result = await actionEngineService.sendMeetingProposal(req.params.contactId);
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ONE-CLICK: Zendesk Task erstellen
+router.post('/action/create-task/:contactId', async (req, res) => {
+  try {
+    const contact = unifiedContactService.getContact(req.params.contactId);
+    if (!contact) return res.status(404).json({ error: 'Contact not found' });
+
+    const analysis = await callManagerService.analyzeContact(req.params.contactId);
+    
+    const ticket = await zendeskService.createTicket({
+      subject: `📞 Anrufen: ${contact.company || contact.firstName} ${contact.lastName}`,
+      description: `
+        <h2>Anruf-Aufgabe</h2>
+        <p><strong>Telefon:</strong> <a href="tel:${contact.phone || contact.mobile}">${contact.phone || contact.mobile}</a></p>
+        <p><strong>E-Mail:</strong> ${contact.email}</p>
+        <p><strong>Priorität:</strong> ${analysis?.callPriority || 'medium'}</p>
+        <p><strong>Gründe:</strong> ${analysis?.reasons?.map(r => callManagerService.getReasonText(r)).join(', ') || '-'}</p>
+      `,
+      priority: analysis?.callPriority === 'urgent' ? 'urgent' : 'high',
+      type: 'task',
+      requesterEmail: contact.email
+    });
+
+    res.json({ success: true, ticketId: ticket.id });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Empfehlung überspringen (Feedback: skip)
+router.post('/action/skip/:contactId', async (req, res) => {
+  try {
+    actionEngineService.submitFeedback({
+      contactId: req.params.contactId,
+      outcome: 'skipped',
+      notes: req.body.reason || 'Übersprungen'
+    });
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Anruf-Ergebnis erfassen
+router.post('/action/call-outcome/:contactId', async (req, res) => {
+  try {
+    const result = await actionEngineService.recordCallOutcome(req.params.contactId, req.body);
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 });
 
 export default router;
