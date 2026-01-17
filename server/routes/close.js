@@ -4,6 +4,7 @@
 
 import express from 'express';
 import { closeService } from '../services/closeService.js';
+import { myzelBridgeService } from '../services/myzelBridgeService.js';
 import logger from '../utils/logger.js';
 
 const router = express.Router();
@@ -563,6 +564,231 @@ router.post('/custom-fields/setup-renew', async (req, res) => {
       failed: results.filter(r => !r.success).length,
       results 
     });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================
+// WEBHOOKS - Echtzeit Events
+// ============================================
+
+router.get('/webhooks', async (req, res) => {
+  try {
+    const webhooks = await closeService.getWebhooks();
+    res.json(webhooks);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/webhooks', async (req, res) => {
+  try {
+    const result = await closeService.createWebhook(req.body);
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.delete('/webhooks/:id', async (req, res) => {
+  try {
+    await closeService.deleteWebhook(req.params.id);
+    res.json({ success: true, deleted: req.params.id });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/webhooks/setup-all', async (req, res) => {
+  try {
+    const callbackUrl = req.body.callback_url || 'https://zoom-control-center-production.up.railway.app/api';
+    const results = await closeService.setupAllWebhooks(callbackUrl);
+    res.json({ 
+      success: true, 
+      created: results.filter(r => r.success).length,
+      results 
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Webhook Receivers - Close sendet Events hierher
+router.post('/webhook/lead', async (req, res) => {
+  try {
+    const event = req.body.event;
+    logger.info('📥 Close Webhook: Lead Event', { action: event?.action, lead_id: event?.object_id });
+    
+    // Bei Lead-Updates: Renew informieren
+    if (event?.action === 'updated' && event?.data) {
+      const leadData = event.data;
+      // Status-Änderungen an Renew melden
+      if (event.changed_fields?.includes('status_id')) {
+        await myzelBridgeService.sendExternalSignal({
+          type: 'lead_status_changed',
+          lead_id: leadData.id,
+          new_status: leadData.status_label,
+          previous_status: event.previous_data?.status_label
+        }).catch(e => logger.warn('Renew sync failed', e.message));
+      }
+    }
+    
+    res.json({ received: true });
+  } catch (error) {
+    logger.error('Webhook Lead Error', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/webhook/opportunity', async (req, res) => {
+  try {
+    const event = req.body.event;
+    logger.info('📥 Close Webhook: Opportunity Event', { action: event?.action, opp_id: event?.object_id });
+    
+    // Bei Won-Status: Provision tracking
+    if (event?.data?.status_type === 'won') {
+      await myzelBridgeService.sendExternalSignal({
+        type: 'opportunity_won',
+        opportunity_id: event.data.id,
+        lead_id: event.data.lead_id,
+        value: event.data.value,
+        contact_name: event.data.contact_name
+      }).catch(e => logger.warn('Renew sync failed', e.message));
+    }
+    
+    res.json({ received: true });
+  } catch (error) {
+    logger.error('Webhook Opportunity Error', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/webhook/activity', async (req, res) => {
+  try {
+    const event = req.body.event;
+    logger.info('📥 Close Webhook: Activity Event', { type: event?.object_type, action: event?.action });
+    
+    // Aktivitäten an Renew für Scoring
+    await myzelBridgeService.sendCommunicationEvent({
+      type: event?.object_type?.replace('activity.', ''),
+      lead_id: event?.lead_id,
+      direction: event?.data?.direction,
+      timestamp: event?.date_created
+    }).catch(e => logger.warn('Renew sync failed', e.message));
+    
+    res.json({ received: true });
+  } catch (error) {
+    logger.error('Webhook Activity Error', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/webhook/task', async (req, res) => {
+  try {
+    const event = req.body.event;
+    logger.info('📥 Close Webhook: Task Event', { action: event?.action, task_id: event?.object_id });
+    res.json({ received: true });
+  } catch (error) {
+    logger.error('Webhook Task Error', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================
+// BULK ACTIONS - Massenoperationen
+// ============================================
+
+router.post('/bulk/email', async (req, res) => {
+  try {
+    const { query, template_id, sender_account_id, sender_name, sender_email } = req.body;
+    const result = await closeService.bulkEmail(query, template_id, sender_account_id, sender_name, sender_email);
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/bulk/sequence-subscribe', async (req, res) => {
+  try {
+    const { query, sequence_id, sender_account_id, sender_name, sender_email } = req.body;
+    const result = await closeService.bulkSequenceSubscribe(query, sequence_id, sender_account_id, sender_name, sender_email);
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/bulk/set-status', async (req, res) => {
+  try {
+    const { query, status_id } = req.body;
+    const result = await closeService.bulkSetLeadStatus(query, status_id);
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/bulk/set-field', async (req, res) => {
+  try {
+    const { query, field_id, value } = req.body;
+    const result = await closeService.bulkSetCustomField(query, field_id, value);
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.get('/bulk/:type/:id', async (req, res) => {
+  try {
+    const result = await closeService.getBulkActionStatus(req.params.type, req.params.id);
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================
+// POWER DIALER - Auto-Calling
+// ============================================
+
+router.get('/dialer', async (req, res) => {
+  try {
+    const sessions = await closeService.getDialerSessions();
+    res.json(sessions);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/dialer/start', async (req, res) => {
+  try {
+    const { smart_view_id, type } = req.body;
+    const result = await closeService.startDialer(smart_view_id, type || 'power');
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.delete('/dialer/:id', async (req, res) => {
+  try {
+    await closeService.stopDialer(req.params.id);
+    res.json({ success: true, stopped: req.params.id });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================
+// EVENT LOG
+// ============================================
+
+router.get('/events', async (req, res) => {
+  try {
+    const { limit, object_type } = req.query;
+    const events = await closeService.getEventLog(limit || 100, object_type);
+    res.json(events);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

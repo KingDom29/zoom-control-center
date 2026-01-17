@@ -307,6 +307,124 @@ class CloseService {
   }
 
   // ============================================
+  // WEBHOOKS - Echtzeit Events von Close
+  // ============================================
+
+  async getWebhooks() {
+    return this.request('GET', '/webhook/');
+  }
+
+  async createWebhook(data) {
+    return this.request('POST', '/webhook/', data);
+  }
+
+  async deleteWebhook(webhookId) {
+    return this.request('DELETE', `/webhook/${webhookId}/`);
+  }
+
+  async setupAllWebhooks(callbackUrl) {
+    const webhookConfigs = [
+      { url: `${callbackUrl}/close/webhook/lead`, events: [{ object_type: 'lead', action: 'created' }, { object_type: 'lead', action: 'updated' }, { object_type: 'lead', action: 'deleted' }] },
+      { url: `${callbackUrl}/close/webhook/opportunity`, events: [{ object_type: 'opportunity', action: 'created' }, { object_type: 'opportunity', action: 'updated' }] },
+      { url: `${callbackUrl}/close/webhook/activity`, events: [{ object_type: 'activity.call', action: 'created' }, { object_type: 'activity.email', action: 'created' }, { object_type: 'activity.sms', action: 'created' }] },
+      { url: `${callbackUrl}/close/webhook/task`, events: [{ object_type: 'task', action: 'created' }, { object_type: 'task', action: 'completed' }] }
+    ];
+
+    const results = [];
+    for (const config of webhookConfigs) {
+      try {
+        const result = await this.createWebhook(config);
+        results.push({ success: true, ...result });
+      } catch (error) {
+        results.push({ success: false, error: error.message, config });
+      }
+    }
+    return results;
+  }
+
+  // ============================================
+  // BULK ACTIONS - Massenoperationen
+  // ============================================
+
+  async bulkEmail(query, templateId, senderAccountId, senderName, senderEmail) {
+    return this.request('POST', '/bulk_action/email/', {
+      query,
+      template_id: templateId,
+      sender_account_id: senderAccountId,
+      sender_name: senderName,
+      sender_email: senderEmail,
+      contact_preference: 'lead',
+      send_done_email: true
+    });
+  }
+
+  async bulkSequenceSubscribe(query, sequenceId, senderAccountId, senderName, senderEmail) {
+    return this.request('POST', '/bulk_action/sequence_subscription/', {
+      query,
+      action_type: 'subscribe',
+      sequence_id: sequenceId,
+      sender_account_id: senderAccountId,
+      sender_name: senderName,
+      sender_email: senderEmail,
+      contact_preference: 'lead'
+    });
+  }
+
+  async bulkEdit(query, type, params) {
+    return this.request('POST', '/bulk_action/edit/', {
+      query,
+      type,
+      ...params,
+      send_done_email: false
+    });
+  }
+
+  async bulkSetLeadStatus(query, statusId) {
+    return this.bulkEdit(query, 'set_lead_status', { lead_status_id: statusId });
+  }
+
+  async bulkSetCustomField(query, fieldId, value) {
+    return this.bulkEdit(query, 'set_custom_field', { 
+      custom_field_id: fieldId, 
+      custom_field_value: value 
+    });
+  }
+
+  async getBulkActionStatus(type, actionId) {
+    return this.request('GET', `/bulk_action/${type}/${actionId}/`);
+  }
+
+  // ============================================
+  // POWER DIALER - Auto-Calling
+  // ============================================
+
+  async getDialerSessions() {
+    return this.request('GET', '/dialer/');
+  }
+
+  async startDialer(smartViewId, type = 'power') {
+    return this.request('POST', '/dialer/', {
+      source_type: 'saved-search',
+      source_value: smartViewId,
+      type: type
+    });
+  }
+
+  async stopDialer(dialerId) {
+    return this.request('DELETE', `/dialer/${dialerId}/`);
+  }
+
+  // ============================================
+  // EVENT LOG - Aktivitäten nachverfolgen
+  // ============================================
+
+  async getEventLog(limit = 100, objectType = null) {
+    let endpoint = `/event/?_limit=${limit}`;
+    if (objectType) endpoint += `&object_type=${objectType}`;
+    return this.request('GET', endpoint);
+  }
+
+  // ============================================
   // CALL RECOMMENDATIONS (Integration mit unserem System)
   // ============================================
 
