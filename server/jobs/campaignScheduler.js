@@ -6,6 +6,7 @@ import { meetingQualityService } from '../services/meetingQualityService.js';
 import { salesAutomationService } from '../services/salesAutomationService.js';
 import { pipelineService } from '../services/unified/pipelineService.js';
 import { callManagerService } from '../services/unified/callManagerService.js';
+import { teamAssignmentService } from '../services/unified/teamAssignmentService.js';
 import logger from '../utils/logger.js';
 
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
@@ -767,6 +768,31 @@ const callManagerJob = cron.schedule('30 8 * * 1-5', async () => {
 }, { timezone: 'Europe/Berlin' });
 logger.info('📞 Call Manager Job: Werktags 8:30 Uhr');
 
+// ============================================
+// TEAM RECOMMENDATIONS - "Du solltest jetzt anrufen bei X weil Y"
+// ============================================
+
+async function runTeamRecommendations() {
+  logger.info('📧 Starte Team-Empfehlungen...');
+  try {
+    const result = await teamAssignmentService.sendDailyRecommendations();
+    logger.info('✅ Team-Empfehlungen gesendet', { 
+      emailsSent: result.emailsSent, 
+      ticketsCreated: result.ticketsCreated 
+    });
+    return result;
+  } catch (error) {
+    logger.error('Team-Empfehlungen Fehler', { error: error.message });
+    throw error;
+  }
+}
+
+// Täglich 8:00 Uhr - Empfehlungen an Team senden
+const teamRecommendationsJob = cron.schedule('0 8 * * 1-5', async () => {
+  await runTeamRecommendations();
+}, { timezone: 'Europe/Berlin' });
+logger.info('📧 Team Recommendations Job: Werktags 8:00 Uhr');
+
 // Export für manuelle Ausführung und Status-Check
 export { 
   runCampaignBatch, campaignJob, 
@@ -789,5 +815,6 @@ export {
   runWarmUps, warmUpJob,
   runDealClosers, dealCloserJob,
   runUnifiedSequences, unifiedSequenceJob,
-  runDailyCallManager, callManagerJob
+  runDailyCallManager, callManagerJob,
+  runTeamRecommendations, teamRecommendationsJob
 };

@@ -9,6 +9,7 @@ import {
   pipelineService,
   brandingService,
   callManagerService,
+  teamAssignmentService,
   STAGES,
   SOURCES,
   SEQUENCE_TEMPLATES,
@@ -404,6 +405,84 @@ router.post('/send/whatsapp-zendesk', async (req, res) => {
     res.json(result);
   } catch (error) {
     logger.error('WhatsApp Zendesk Fehler', { error: error.message });
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================
+// TEAM ASSIGNMENT
+// ============================================
+
+// Team-Mitglieder (von Zoom)
+router.get('/team', async (req, res) => {
+  try {
+    const members = await teamAssignmentService.getTeamMembers(req.query.refresh === 'true');
+    res.json(members);
+  } catch (error) {
+    logger.error('Team Members Fehler', { error: error.message });
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Team-Member Einstellungen
+router.put('/team/:memberId/settings', (req, res) => {
+  try {
+    teamAssignmentService.updateMemberSettings(req.params.memberId, req.body);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Kontakt zuweisen
+router.post('/team/assign', async (req, res) => {
+  try {
+    const { contactId, memberId, reason } = req.body;
+    const result = await teamAssignmentService.assignContact(contactId, memberId, reason);
+    res.json(result);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+// Auto-Zuweisung
+router.post('/team/auto-assign/:contactId', async (req, res) => {
+  try {
+    const member = await teamAssignmentService.autoAssignContact(req.params.contactId);
+    res.json({ success: !!member, member });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Team-Empfehlungen generieren
+router.get('/team/recommendations', async (req, res) => {
+  try {
+    const recommendations = await teamAssignmentService.generateTeamRecommendations();
+    res.json(recommendations);
+  } catch (error) {
+    logger.error('Recommendations Fehler', { error: error.message });
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Empfehlungs-E-Mails senden (manuell)
+router.post('/team/send-recommendations', async (req, res) => {
+  try {
+    const result = await teamAssignmentService.sendDailyRecommendations();
+    res.json(result);
+  } catch (error) {
+    logger.error('Send Recommendations Fehler', { error: error.message });
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Team Stats
+router.get('/team/stats', async (req, res) => {
+  try {
+    const stats = await teamAssignmentService.getTeamStats();
+    res.json(stats);
+  } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
