@@ -305,8 +305,8 @@ function getEmailTemplate(branch, lead) {
   <p style="font-size: 11px; color: #666;">
     <a href="{{optout_url}}" style="color: #999;">Keine weiteren E-Mails</a><br><br>
     <strong>Leadquelle Deutschland</strong><br>
-    Französische Str. 20, 10117 Berlin<br>
-    E-Mail: de@leadquelle.ai<br>
+    Friedrichstraße 171, 10117 Berlin<br>
+    Web: leadquelle.ai | E-Mail: de@leadquelle.ai<br>
     Geschäftsführer: Dominik Eisenhardt
   </p>
 </div>
@@ -321,7 +321,8 @@ function getEmailTemplate(branch, lead) {
 class MultiLeadService {
   constructor() {
     this.apiKey = process.env.GOOGLE_PLACES_API_KEY;
-    this.bookingUrl = process.env.MULTI_BOOKING_URL || 'https://booking.leadquelle.ai/analyse';
+    // Zoom Scheduler für Terminbuchung
+    this.bookingUrl = process.env.MULTI_BOOKING_URL || 'https://scheduler.zoom.us/leadquelle/analyse';
     this.fromEmail = process.env.LEADQUELLE_EMAIL || 'de@leadquelle.ai';
     this.minRating = 3.5; // Niedrigere Schwelle für breitere Zielgruppe
     this.initData();
