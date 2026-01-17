@@ -409,6 +409,51 @@ ${isUrgent ? '<p style="background: #fef2f2; padding: 15px; border-radius: 8px; 
       customers: inactive
     };
   }
+
+  /**
+   * Alle Users abrufen
+   */
+  async searchUsers(query = '*', limit = 100) {
+    if (!this.isConfigured()) return [];
+
+    try {
+      const response = await axios.get(`${this.baseUrl}/users.json`, {
+        headers: { 'Authorization': `Basic ${this.auth}` },
+        params: { per_page: Math.min(limit, 100) }
+      });
+
+      return response.data.users || [];
+    } catch (error) {
+      logger.error('Zendesk searchUsers Fehler', { error: error.message });
+      return [];
+    }
+  }
+
+  /**
+   * Tickets abrufen
+   */
+  async getTickets(options = {}) {
+    if (!this.isConfigured()) return [];
+
+    try {
+      const { limit = 100, status } = options;
+      let url = `${this.baseUrl}/tickets.json`;
+      
+      if (status) {
+        url = `${this.baseUrl}/search.json?query=type:ticket status:${status}`;
+      }
+
+      const response = await axios.get(url, {
+        headers: { 'Authorization': `Basic ${this.auth}` },
+        params: { per_page: Math.min(limit, 100) }
+      });
+
+      return response.data.tickets || response.data.results || [];
+    } catch (error) {
+      logger.error('Zendesk getTickets Fehler', { error: error.message });
+      return [];
+    }
+  }
 }
 
 export const zendeskService = new ZendeskService();
