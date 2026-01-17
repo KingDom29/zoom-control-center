@@ -111,9 +111,8 @@ router.get('/calls/active', async (req, res) => {
 // ============================================
 
 // Konfiguration
-const NOTIFY_PHONE = '+41764357375'; // SMS-Benachrichtigungen
-const ZENDESK_TALK_NUMBER = '+41445515459'; // Zendesk Talk Nummer (falls vorhanden)
-const DOMINIK_PHONE = '+41764357375'; // Backup Weiterleitung
+const NOTIFY_PHONE = '+41764357375'; // SMS-Benachrichtigungen (nur Reports)
+const ZENDESK_TALK_NUMBER = '+41445515459'; // Zendesk Talk Nummer
 
 // Eingehender Anruf - Haupthandler
 router.post('/voice/incoming', async (req, res) => {
@@ -148,14 +147,14 @@ router.post('/voice/incoming', async (req, res) => {
     });
   }
 
-  // TwiML Response - Simultanes Klingeln (Zendesk Talk + Dominik)
+  // TwiML Response - Weiterleitung an Zendesk Talk, dann Voicemail
   res.type('text/xml');
   res.send(`
     <?xml version="1.0" encoding="UTF-8"?>
     <Response>
       <Say language="de-DE">Willkommen bei Maklerplan. Bitte warten Sie, wir verbinden Sie.</Say>
       <Dial timeout="30" callerId="${From}" record="record-from-answer">
-        <Number>${DOMINIK_PHONE}</Number>
+        <Number>${ZENDESK_TALK_NUMBER}</Number>
       </Dial>
       <Say language="de-DE">Es konnte leider niemand erreicht werden. Bitte hinterlassen Sie eine Nachricht nach dem Signalton.</Say>
       <Record maxLength="120" transcribe="true" transcribeCallback="/api/twilio/voice/transcription" />
