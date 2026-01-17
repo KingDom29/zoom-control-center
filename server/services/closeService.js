@@ -378,6 +378,209 @@ class CloseService {
     
     return null;
   }
+
+  // ============================================
+  // ZENDESK → CLOSE SYNC
+  // ============================================
+
+  /**
+   * Importiert einen Zendesk User/Ticket als Close Lead
+   */
+  async importFromZendesk(zendeskData, type = 'makler') {
+    const { 
+      email, 
+      name, 
+      phone, 
+      company,
+      address,
+      tags = [],
+      ticketId,
+      ticketSubject,
+      customFields = {}
+    } = zendeskData;
+
+    // Prüfen ob Lead schon existiert
+    const existing = await this.searchLeads(`email:"${email}"`, 1);
+    if (existing?.data?.length > 0) {
+      // Lead updaten
+      return this.updateLead(existing.data[0].id, {
+        custom: customFields
+      });
+    }
+
+    // Neuen Lead erstellen
+    const leadData = {
+      name: company || name,
+      url: zendeskData.website || null,
+      description: ticketSubject ? `Zendesk Ticket: ${ticketSubject}` : '',
+      status_id: 'stat_MNwde2bb9U6q8UIBiwqKN6luKLezxVoTRvQBrFcCcM3', // "Neu eingegangen"
+      contacts: [{
+        name: name,
+        emails: email ? [{ email, type: 'office' }] : [],
+        phones: phone ? [{ phone, type: 'office' }] : []
+      }],
+      custom: {
+        'Quelle': 'Zendesk',
+        'Typ': type, // 'makler' oder 'eigentuemer'
+        'Zendesk Ticket ID': ticketId || null,
+        ...customFields
+      }
+    };
+
+    if (address) {
+      leadData.addresses = [{ address_1: address, city: '', country: 'DE' }];
+    }
+
+    return this.createLead(leadData);
+  }
+
+  /**
+   * Importiert Immobilieneigentümer als Lead
+   */
+  async importEigentuemer(data) {
+    const {
+      name,
+      email,
+      phone,
+      immobilienTyp,
+      plz,
+      ort,
+      strasse,
+      verkaufsgrund,
+      zeitrahmen,
+      preis,
+      maklerId // Welcher Makler-Partner bekommt den Lead
+    } = data;
+
+    const leadData = {
+      name: name || `Eigentümer ${plz}`,
+      description: `${immobilienTyp || 'Immobilie'} in ${plz} ${ort}`,
+      status_id: 'stat_MNwde2bb9U6q8UIBiwqKN6luKLezxVoTRvQBrFcCcM3',
+      contacts: [{
+        name: name || 'Eigentümer',
+        emails: email ? [{ email, type: 'office' }] : [],
+        phones: phone ? [{ phone, type: 'mobile' }] : []
+      }],
+      addresses: [{
+        address_1: strasse || '',
+        city: ort || '',
+        zipcode: plz || '',
+        country: 'DE'
+      }],
+      custom: {
+        'Typ': 'eigentuemer',
+        'Immobilientyp': immobilienTyp || '',
+        'PLZ Immobilie': plz || '',
+        'Verkaufsgrund': verkaufsgrund || '',
+        'Zeitrahmen': zeitrahmen || '',
+        'Preisvorstellung': preis || '',
+        'Zugewiesener Makler-ID': maklerId || ''
+      }
+    };
+
+    return this.createLead(leadData);
+  }
+
+  /**
+   * Importiert Makler-Partner als Lead
+   */
+  async importMakler(data) {
+    const {
+      firma,
+      ansprechpartner,
+      email,
+      phone,
+      website,
+      plz,
+      ort,
+      umkreis,
+      abonnement,
+      kontingent,
+      bexioId
+    } = data;
+
+    const leadData = {
+      name: firma,
+      url: website || null,
+      description: `Makler-Partner in ${plz} ${ort}`,
+      status_id: 'stat_MNwde2bb9U6q8UIBiwqKN6luKLezxVoTRvQBrFcCcM3',
+      contacts: [{
+        name: ansprechpartner || firma,
+        emails: email ? [{ email, type: 'office' }] : [],
+        phones: phone ? [{ phone, type: 'office' }] : []
+      }],
+      addresses: [{
+        city: ort || '',
+        zipcode: plz || '',
+        country: 'DE'
+      }],
+      custom: {
+        'Typ': 'makler',
+        'Partner-Abonnement': abonnement || 'PREPAID',
+        'Kontingent Leads': kontingent || 0,
+        'Partner-Umkreis km': umkreis || 25,
+        'Bexio Kundennummer': bexioId || '',
+        'Makler-ID': bexioId || ''
+      }
+    };
+
+    return this.createLead(leadData);
+  }
+
+  /**
+   * Holt alle Leads eines bestimmten Typs
+   */
+  async getLeadsByType(type, limit = 100) {
+    // Close Custom Field Query
+    return this.searchLeads(`custom.Typ:"${type}"`, limit);
+  }
+
+  /**
+   * Holt Makler mit freiem Kontingent
+   */
+  async getMaklerMitKontingent(plz, limit = 10) {
+    // Makler in der Nähe mit Kontingent > 0
+    const makler = await this.searchLeads(`custom.Typ:"makler"`, 100);
+    
+    if (!makler?.data) return [];
+
+    return makler.data.filter(m => {
+      const kontingent = m.custom?.['Kontingent Leads'] || 0;
+      const umkreis = m.custom?.['Partner-Umkreis km'] || 25;
+      // TODO: PLZ-Distanz berechnen
+      return kontingent > 0;
+    }).slice(0, limit);
+  }
+
+  /**
+   * Lead einem Makler zuweisen
+   */
+  async assignLeadToMakler(leadId, maklerId) {
+    // Lead updaten
+    await this.updateLead(leadId, {
+      custom: {
+        'Zugewiesener Makler-ID': maklerId,
+        'Zugewiesen am': new Date().toISOString()
+      }
+    });
+
+    // Makler Kontingent reduzieren
+    const makler = await this.getLead(maklerId);
+    if (makler) {
+      const kontingent = (makler.custom?.['Kontingent Leads'] || 1) - 1;
+      await this.updateLead(maklerId, {
+        custom: { 'Kontingent Leads': Math.max(0, kontingent) }
+      });
+    }
+
+    // Task erstellen beim Makler
+    await this.createTask(maklerId, {
+      text: `🏠 Neuer Lead zugewiesen! Lead-ID: ${leadId}`,
+      date: new Date().toISOString().split('T')[0]
+    });
+
+    return { success: true, leadId, maklerId };
+  }
 }
 
 export const closeService = new CloseService();

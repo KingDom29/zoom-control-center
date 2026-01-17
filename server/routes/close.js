@@ -269,4 +269,76 @@ router.post('/reset-all', async (req, res) => {
   }
 });
 
+// ============================================
+// LEAD IMPORT (Eigentümer & Makler)
+// ============================================
+
+// Immobilieneigentümer importieren
+router.post('/import/eigentuemer', async (req, res) => {
+  try {
+    const lead = await closeService.importEigentuemer(req.body);
+    res.json({ success: true, lead });
+  } catch (error) {
+    logger.error('Eigentümer Import Fehler', { error: error.message });
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Makler-Partner importieren
+router.post('/import/makler', async (req, res) => {
+  try {
+    const lead = await closeService.importMakler(req.body);
+    res.json({ success: true, lead });
+  } catch (error) {
+    logger.error('Makler Import Fehler', { error: error.message });
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Zendesk Sync
+router.post('/import/zendesk', async (req, res) => {
+  try {
+    const { type = 'makler', ...data } = req.body;
+    const lead = await closeService.importFromZendesk(data, type);
+    res.json({ success: true, lead });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Leads nach Typ abrufen
+router.get('/leads/type/:type', async (req, res) => {
+  try {
+    const result = await closeService.getLeadsByType(req.params.type, parseInt(req.query.limit) || 100);
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Makler mit Kontingent
+router.get('/makler/mit-kontingent', async (req, res) => {
+  try {
+    const { plz } = req.query;
+    const makler = await closeService.getMaklerMitKontingent(plz);
+    res.json({ makler });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Lead einem Makler zuweisen
+router.post('/assign-lead', async (req, res) => {
+  try {
+    const { leadId, maklerId } = req.body;
+    if (!leadId || !maklerId) {
+      return res.status(400).json({ error: 'leadId und maklerId erforderlich' });
+    }
+    const result = await closeService.assignLeadToMakler(leadId, maklerId);
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 export default router;
