@@ -30,6 +30,8 @@ import logsRouter from './routes/logs.js';
 import multiLeadsRouter from './routes/multiLeads.js';
 import schedulerRouter from './routes/scheduler.js';
 import leadquelleDashboardRouter from './routes/leadquelleDashboard.js';
+import summariesRouter from './routes/summaries.js';
+import { meetingSummaryService } from './services/meetingSummaryService.js';
 import { performanceMiddleware, getMetrics, getMemoryUsage } from './middleware/performance.js';
 import { cacheMiddleware, getCacheStats } from './middleware/cache.js';
 import revenueEventProcessor from './services/revenueEventProcessor.js';
@@ -183,6 +185,7 @@ app.use('/api/logs', logsRouter);
 app.use('/api/multi-leads', multiLeadsRouter);
 app.use('/api/scheduler', schedulerRouter);
 app.use('/leadquelle', leadquelleDashboardRouter);
+app.use('/api/summaries', summariesRouter);
 
 // Enhanced Webhook Routes
 app.post('/api/webhooks', async (req, res) => {
@@ -198,6 +201,15 @@ app.post('/api/webhooks', async (req, res) => {
   try {
     await webhookHandler.processEvent(req.body);
     logger.info(`📥 Webhook received: ${event}`);
+    
+    // Meeting-Zusammenfassung bei Recording-Completion
+    if (event === 'recording.completed') {
+      logger.info('🎬 Recording completed - triggering summary...');
+      meetingSummaryService.handleMeetingEnded(payload).catch(e => 
+        logger.error('Summary trigger Fehler', { error: e.message })
+      );
+    }
+    
     res.status(200).json({ status: 'received' });
   } catch (error) {
     logger.error('Webhook processing error:', { error: error.message });
