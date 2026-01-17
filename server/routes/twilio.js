@@ -235,16 +235,28 @@ router.get('/numbers/search', async (req, res) => {
 // Nummer kaufen
 router.post('/numbers/purchase', async (req, res) => {
   try {
-    const { phoneNumber } = req.body;
+    const { phoneNumber, addressSid } = req.body;
     if (!phoneNumber) {
       return res.status(400).json({ error: 'phoneNumber required' });
     }
     const webhookBaseUrl = process.env.PUBLIC_URL || 'https://zoom-control-center-production.up.railway.app';
-    const result = await twilioService.purchaseNumber(phoneNumber, webhookBaseUrl);
+    
+    let result;
+    if (addressSid) {
+      result = await twilioService.purchaseNumberWithAddress(phoneNumber, addressSid, webhookBaseUrl);
+    } else {
+      result = await twilioService.purchaseNumber(phoneNumber, webhookBaseUrl);
+    }
     res.json(result);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
+});
+
+// Adressen auflisten
+router.get('/addresses', async (req, res) => {
+  const addresses = await twilioService.listAddresses();
+  res.json(addresses);
 });
 
 // ============================================

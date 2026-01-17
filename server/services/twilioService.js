@@ -714,6 +714,66 @@ class TwilioService {
       return [];
     }
   }
+
+  /**
+   * Adressen auflisten
+   */
+  async listAddresses() {
+    if (!this.isConfigured()) return [];
+
+    try {
+      const addresses = await this.client.addresses.list({ limit: 20 });
+      return addresses.map(a => ({
+        sid: a.sid,
+        friendlyName: a.friendlyName,
+        customerName: a.customerName,
+        street: a.street,
+        city: a.city,
+        region: a.region,
+        postalCode: a.postalCode,
+        isoCountry: a.isoCountry,
+        validated: a.validated,
+        verified: a.verified
+      }));
+    } catch (error) {
+      logger.error('Adressen Fehler', { error: error.message });
+      return [];
+    }
+  }
+
+  /**
+   * Nummer mit Adresse kaufen
+   */
+  async purchaseNumberWithAddress(phoneNumber, addressSid, webhookBaseUrl) {
+    if (!this.isConfigured()) return { error: 'Not configured' };
+
+    try {
+      const purchased = await this.client.incomingPhoneNumbers.create({
+        phoneNumber: phoneNumber,
+        addressSid: addressSid,
+        voiceUrl: `${webhookBaseUrl}/api/twilio/voice/incoming`,
+        voiceMethod: 'POST',
+        voiceFallbackUrl: `${webhookBaseUrl}/api/twilio/voice/fallback`,
+        statusCallback: `${webhookBaseUrl}/api/twilio/voice/status`,
+        smsUrl: `${webhookBaseUrl}/api/twilio/incoming-sms`,
+        smsMethod: 'POST',
+        friendlyName: 'Maklerplan CRM'
+      });
+
+      logger.info('✅ Neue Nummer gekauft', { phoneNumber: purchased.phoneNumber });
+
+      return {
+        success: true,
+        sid: purchased.sid,
+        phoneNumber: purchased.phoneNumber,
+        friendlyName: purchased.friendlyName,
+        capabilities: purchased.capabilities
+      };
+    } catch (error) {
+      logger.error('Nummernkauf mit Adresse Fehler', { error: error.message });
+      return { error: error.message };
+    }
+  }
 }
 
 export const twilioService = new TwilioService();
