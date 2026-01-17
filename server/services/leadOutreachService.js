@@ -10,7 +10,7 @@ import crypto from 'crypto';
 import logger from '../utils/logger.js';
 import { emailService } from './emailService.js';
 import { leadDatabase, LeadStatus, LeadPriority } from './leadDatabase.js';
-import { googlePlacesService } from './googlePlacesService.js';
+import { googlePlacesService } from './googlePlaces.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);

@@ -4,13 +4,34 @@
  */
 
 import axios from 'axios';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import logger from '../utils/logger.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Lade alle deutschen Landkreise
+function loadDistricts() {
+  try {
+    const filePath = path.join(__dirname, '../data/german-districts.json');
+    const data = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+    return data.districts;
+  } catch (e) {
+    logger.error('Fehler beim Laden der Landkreise', { error: e.message });
+    return [];
+  }
+}
+
+const GERMAN_DISTRICTS = loadDistricts();
 
 const GOOGLE_PLACES_BASE_URL = 'https://maps.googleapis.com/maps/api/place';
 
 class GooglePlacesService {
   constructor() {
     this.apiKey = process.env.GOOGLE_PLACES_API_KEY;
+    this.minRating = 4.2;
   }
 
   /**
@@ -266,6 +287,118 @@ class GooglePlacesService {
       logger.error('Autocomplete error', { error: error.message });
       return [];
     }
+  }
+
+  // =============================================
+  // LEAD GENERATION FEATURES
+  // =============================================
+
+  /**
+   * Sucht Immobilienmakler in einer Stadt mit mehreren Suchbegriffen
+   */
+  async searchRealtorsInCity(city, radius = 20000) {
+    if (!this.apiKey) {
+      throw new Error('GOOGLE_PLACES_API_KEY nicht konfiguriert');
+    }
+
+    const searchTerms = ['Immobilienmakler', 'Immobilienbüro', 'Real Estate Agent'];
+    const allResults = [];
+
+    for (const term of searchTerms) {
+      try {
+        const response = await axios.get(`${GOOGLE_PLACES_BASE_URL}/nearbysearch/json`, {
+          params: {
+            location: `${city.lat},${city.lng}`,
+            radius,
+            keyword: term,
+            type: 'real_estate_agency',
+            language: 'de',
+            key: this.apiKey
+          }
+        });
+
+        if (response.data.status === 'OK') {
+          allResults.push(...response.data.results);
+        }
+        await this.sleep(200);
+      } catch (error) {
+        logger.error(`Places search error for ${term} in ${city.name}`, { error: error.message });
+      }
+    }
+
+    // Deduplizieren und filtern
+    const uniqueResults = this.deduplicateByPlaceId(allResults);
+    const qualifiedResults = uniqueResults.filter(place => place.rating && place.rating >= this.minRating);
+    logger.info(`📍 ${city.name}: ${qualifiedResults.length} Makler mit ${this.minRating}+ Sternen gefunden`);
+    return qualifiedResults;
+  }
+
+  /**
+   * Extrahiert E-Mail von Website
+   */
+  async scrapeEmailFromWebsite(websiteUrl) {
+    if (!websiteUrl) return null;
+    try {
+      const response = await axios.get(websiteUrl, {
+        timeout: 5000,
+        headers: { 'User-Agent': 'Mozilla/5.0 (compatible; MaklerplanBot/1.0)' }
+      });
+      const html = response.data;
+      const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
+      const emails = html.match(emailRegex) || [];
+      const validEmails = emails.filter(email => 
+        !email.includes('example.com') && !email.includes('domain.com') && 
+        !email.includes('sentry') && !email.includes('wixpress') &&
+        !email.includes('.png') && !email.includes('.jpg')
+      );
+      return validEmails[0] || null;
+    } catch (error) {
+      return null;
+    }
+  }
+
+  /**
+   * Sucht die Top 10 Makler in einem Landkreis
+   */
+  async searchTopRealtorsInDistrict(district, maxResults = 10) {
+    const results = await this.searchRealtorsInCity(district, 25000);
+    return results
+      .filter(p => p.rating >= this.minRating)
+      .sort((a, b) => {
+        if (b.rating !== a.rating) return b.rating - a.rating;
+        return (b.user_ratings_total || 0) - (a.user_ratings_total || 0);
+      })
+      .slice(0, maxResults);
+  }
+
+  /**
+   * Holt alle Landkreise
+   */
+  getAllDistricts() {
+    return GERMAN_DISTRICTS;
+  }
+
+  /**
+   * Holt einen Landkreis nach Index
+   */
+  getDistrictByIndex(index) {
+    return GERMAN_DISTRICTS[index] || null;
+  }
+
+  /**
+   * Dedupliziert nach place_id
+   */
+  deduplicateByPlaceId(results) {
+    const seen = new Set();
+    return results.filter(place => {
+      if (seen.has(place.place_id)) return false;
+      seen.add(place.place_id);
+      return true;
+    });
+  }
+
+  sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
   }
 }
 
