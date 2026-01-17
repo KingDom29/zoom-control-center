@@ -220,14 +220,15 @@ class HotLeadDetector {
             <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
             <p style="color: #666; font-size: 11px; line-height: 1.5;">
               <strong>Maklerplan Pro GmbH</strong><br>
-              Friedrichstraße 123, 10117 Berlin<br>
-              Geschäftsführer: [Name] | HRB 123456 B | AG Charlottenburg<br>
+              Französische Str. 20, 10117 Berlin | +49 30 219 25007<br>
+              HRB 264573 B, Amtsgericht Berlin<br>
               <br>
               <strong>Maklerplan GmbH</strong><br>
-              Bahnhofstrasse 10, 6300 Zug, Schweiz<br>
-              CHE-123.456.789<br>
+              Grafenauweg 8, 6300 Zug, Schweiz | +41 41 510 61 00<br>
+              CHE-138.210.925<br>
               <br>
-              Hot Lead Detector - Automatisch generiert am ${new Date().toLocaleString('de-DE')}
+              Geschäftsführer: Dominik Eisenhardt<br>
+              Hot Lead Detector - ${new Date().toLocaleString('de-DE')}
             </p>
           </div>
         `
