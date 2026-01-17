@@ -378,6 +378,109 @@ router.post('/assign-lead', async (req, res) => {
 });
 
 // ============================================
+// CLOSE.COM FEATURES EXPLORATION
+// ============================================
+
+router.get('/explore', async (req, res) => {
+  try {
+    const [org, users, templates, sequences, phones, smartViews] = await Promise.all([
+      closeService.getOrganization().catch(() => null),
+      closeService.getUsers().catch(() => null),
+      closeService.getEmailTemplates().catch(() => null),
+      closeService.getSequences().catch(() => null),
+      closeService.getPhoneNumbers().catch(() => null),
+      closeService.getSmartViews().catch(() => null)
+    ]);
+
+    res.json({
+      organization: org ? { name: org.first_name, email: org.email } : null,
+      users: users?.data?.length || 0,
+      email_templates: templates?.data?.length || 0,
+      sequences: sequences?.data?.length || 0,
+      phone_numbers: phones?.data?.length || 0,
+      smart_views: smartViews?.data?.length || 0,
+      features: {
+        calling: !!phones?.data?.length,
+        email_sync: true,
+        sms: true,
+        sequences: true,
+        smart_views: true,
+        custom_fields: true,
+        pipelines: true,
+        webhooks: true
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.get('/email-templates', async (req, res) => {
+  try {
+    const templates = await closeService.getEmailTemplates();
+    res.json(templates);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/email-templates', async (req, res) => {
+  try {
+    const template = await closeService.createEmailTemplate(req.body);
+    res.json(template);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.get('/sequences', async (req, res) => {
+  try {
+    const sequences = await closeService.getSequences();
+    res.json(sequences);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.get('/phone-numbers', async (req, res) => {
+  try {
+    const phones = await closeService.getPhoneNumbers();
+    res.json(phones);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.get('/users', async (req, res) => {
+  try {
+    const users = await closeService.getUsers();
+    res.json(users);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/send-email', async (req, res) => {
+  try {
+    const { lead_id, ...data } = req.body;
+    const result = await closeService.sendEmail(lead_id, data);
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/send-sms', async (req, res) => {
+  try {
+    const { lead_id, ...data } = req.body;
+    const result = await closeService.sendSMS(lead_id, data);
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================
 // CUSTOM FIELD MANAGEMENT
 // ============================================
 

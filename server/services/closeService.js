@@ -231,6 +231,66 @@ class CloseService {
   }
 
   // ============================================
+  // CLOSE.COM FEATURES EXPLORATION
+  // ============================================
+
+  async getEmailTemplates() {
+    return this.request('GET', '/email_template/');
+  }
+
+  async createEmailTemplate(data) {
+    return this.request('POST', '/email_template/', data);
+  }
+
+  async getSequences() {
+    return this.request('GET', '/sequence/');
+  }
+
+  async getConnectedAccounts() {
+    return this.request('GET', '/connected_account/');
+  }
+
+  async getPhoneNumbers() {
+    return this.request('GET', '/phone_number/');
+  }
+
+  async getUsers() {
+    return this.request('GET', '/user/');
+  }
+
+  async getOrganization() {
+    return this.request('GET', '/me/');
+  }
+
+  async sendEmail(leadId, data) {
+    return this.request('POST', '/activity/email/', {
+      lead_id: leadId,
+      direction: 'outgoing',
+      status: 'outbox',
+      subject: data.subject,
+      body_text: data.body_text,
+      body_html: data.body_html,
+      to: data.to,
+      ...data
+    });
+  }
+
+  async sendSMS(leadId, data) {
+    return this.request('POST', '/activity/sms/', {
+      lead_id: leadId,
+      direction: 'outgoing',
+      status: 'scheduled',
+      text: data.text,
+      phone: data.phone,
+      ...data
+    });
+  }
+
+  async getCallStats() {
+    return this.request('GET', '/report/activity/call/');
+  }
+
+  // ============================================
   // CALL RECOMMENDATIONS (Integration mit unserem System)
   // ============================================
 
