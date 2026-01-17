@@ -455,6 +455,133 @@ class MyzelBridgeService {
         : `❌ Kein Auto-Call: ${!assignment.canAssign ? 'Assignment blocked' : 'Not ready'}`
     };
   }
+
+  // ============================================
+  // COMMUNICATION & CHILD TRACKING
+  // ============================================
+
+  /**
+   * Sendet Kommunikations-Event für Multi-Channel Tracking
+   * @param {Object} data - Event-Daten
+   * @param {string} data.bexioNr - Makler Bexio-Nummer
+   * @param {string} data.channel - 'email', 'call', 'sms', 'zoom'
+   * @param {string} data.direction - 'inbound', 'outbound'
+   * @param {string} data.eventType - 'sent', 'received', 'opened', 'clicked', 'completed', 'no_answer'
+   * @param {string} data.subject - Optional: Bei Email
+   * @param {number} data.duration - Optional: Bei Call (Sekunden)
+   */
+  async sendCommunicationEvent(data) {
+    try {
+      const response = await axios.post(`${this.baseUrl}/webhook/communication-event`, {
+        bexio_nr: data.bexioNr,
+        channel: data.channel,
+        direction: data.direction,
+        event_type: data.eventType,
+        subject: data.subject,
+        duration: data.duration,
+        metadata: data.metadata,
+        timestamp: new Date().toISOString()
+      }, { timeout: 10000 });
+
+      logger.debug('📡 Communication Event gesendet', { 
+        bexioNr: data.bexioNr, 
+        channel: data.channel,
+        eventType: data.eventType 
+      });
+
+      return response.data;
+    } catch (error) {
+      logger.error('Communication Event Fehler', { error: error.message });
+      return null;
+    }
+  }
+
+  /**
+   * Sendet Child-Zuweisung (Eigentümer → Makler)
+   * @param {Object} data - Zuweisungs-Daten
+   * @param {string} data.bexioNr - Makler Bexio-Nummer
+   * @param {string} data.childId - Close Opportunity ID
+   * @param {Object} data.childData - Eigentümer-Daten
+   */
+  async sendChildAssigned(data) {
+    try {
+      logger.info('👶 Sende Child-Zuweisung', { 
+        bexioNr: data.bexioNr, 
+        childId: data.childId 
+      });
+
+      const response = await axios.post(`${this.baseUrl}/webhook/child-assigned`, {
+        bexio_nr: data.bexioNr,
+        child_id: data.childId,
+        child_data: {
+          name: data.childData.name,
+          phone: data.childData.phone,
+          email: data.childData.email,
+          plz: data.childData.plz,
+          immobilie_typ: data.childData.immobilieTyp,
+          wert_schaetzung: data.childData.wertSchaetzung
+        },
+        assigned_at: new Date().toISOString()
+      }, { timeout: 10000 });
+
+      logger.info('👶 Child-Zuweisung bestätigt', { 
+        bexioNr: data.bexioNr,
+        childId: data.childId 
+      });
+
+      return response.data;
+    } catch (error) {
+      logger.error('Child-Zuweisung Fehler', { 
+        bexioNr: data.bexioNr,
+        error: error.response?.data || error.message 
+      });
+      return null;
+    }
+  }
+
+  /**
+   * Sendet Child-Status Update (Verkauft, Lost, etc.)
+   * @param {Object} data - Status-Daten
+   * @param {string} data.bexioNr - Makler Bexio-Nummer
+   * @param {string} data.childId - Close Opportunity ID
+   * @param {string} data.status - 'sold', 'lost', 'expired', 'in_progress'
+   * @param {number} data.salePrice - Optional: Bei sold
+   * @param {string} data.lostReason - Optional: Bei lost
+   * @param {number} data.daysToOutcome - Tage seit Zuweisung
+   */
+  async sendChildStatus(data) {
+    try {
+      logger.info('📊 Sende Child-Status', { 
+        bexioNr: data.bexioNr, 
+        childId: data.childId,
+        status: data.status 
+      });
+
+      const response = await axios.post(`${this.baseUrl}/webhook/child-status`, {
+        bexio_nr: data.bexioNr,
+        child_id: data.childId,
+        status: data.status,
+        sale_price: data.salePrice,
+        lost_reason: data.lostReason,
+        days_to_outcome: data.daysToOutcome,
+        timestamp: new Date().toISOString()
+      }, { timeout: 10000 });
+
+      logger.info('📊 Child-Status bestätigt', { 
+        bexioNr: data.bexioNr,
+        status: data.status,
+        success: response.data?.success 
+      });
+
+      return response.data;
+    } catch (error) {
+      logger.error('Child-Status Fehler', { 
+        bexioNr: data.bexioNr,
+        error: error.response?.data || error.message 
+      });
+      return null;
+    }
+  }
 }
 
 export const myzelBridgeService = new MyzelBridgeService();
