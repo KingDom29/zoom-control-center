@@ -6,6 +6,7 @@
 import express from 'express';
 import { emailService, EMAIL_TEMPLATES } from '../services/emailService.js';
 import { leadDatabase } from '../services/leadDatabase.js';
+import { hotLeadDetector } from '../services/hotLeadDetector.js';
 import logger from '../utils/logger.js';
 
 const router = express.Router();
@@ -320,5 +321,70 @@ router.get('/inbox/:id', async (req, res) => {
 
 // HINWEIS: /campaign-replies und /reply-stats wurden nach /api/campaign verschoben
 // Nutze: GET /api/campaign/sync-replies und GET /api/campaign/actionable-replies
+
+// =============================================
+// HOT LEAD DETECTOR
+// =============================================
+
+// GET /api/emails/hot-leads - Hot Leads scannen
+router.get('/hot-leads', async (req, res) => {
+  try {
+    const { minScore = 30, limit = 50 } = req.query;
+    const result = await hotLeadDetector.scanInbox({ 
+      minScore: parseInt(minScore), 
+      limit: parseInt(limit) 
+    });
+    res.json({ success: true, ...result });
+  } catch (error) {
+    logger.error('Hot Lead Scan Fehler', { error: error.message });
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// POST /api/emails/hot-leads/scan-notify - Scannen UND benachrichtigen
+router.post('/hot-leads/scan-notify', async (req, res) => {
+  try {
+    const { minScore = 50, notifyEmail = 'support@maklerplan.com', createMeeting = true } = req.body;
+    const result = await hotLeadDetector.scanAndNotify({ minScore, notifyEmail, createMeeting });
+    res.json({ success: true, ...result });
+  } catch (error) {
+    logger.error('Hot Lead Scan+Notify Fehler', { error: error.message });
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// POST /api/emails/hot-leads/:messageId/notify - Einzelnen Lead benachrichtigen
+router.post('/hot-leads/:messageId/notify', async (req, res) => {
+  try {
+    const { createMeeting = true, notifyEmail = 'support@maklerplan.com' } = req.body;
+    
+    // Message abrufen und Score berechnen
+    const msg = await emailService.getMessage(req.params.messageId);
+    const { score, matchedKeywords } = hotLeadDetector.calculateUrgencyScore(msg.subject, msg.body);
+    
+    const lead = {
+      messageId: msg.id,
+      from: msg.from,
+      fromName: msg.fromName,
+      subject: msg.subject,
+      preview: msg.body?.substring(0, 200),
+      receivedAt: msg.receivedAt,
+      urgencyScore: score,
+      matchedKeywords,
+      priority: score >= 70 ? 'CRITICAL' : score >= 50 ? 'HIGH' : 'MEDIUM'
+    };
+    
+    const result = await hotLeadDetector.notifyHotLead(lead, { createMeeting, notifyEmail });
+    res.json({ success: true, ...result });
+  } catch (error) {
+    logger.error('Hot Lead Notify Fehler', { error: error.message });
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// GET /api/emails/hot-leads/status - Status des Detectors
+router.get('/hot-leads/status', (req, res) => {
+  res.json({ success: true, ...hotLeadDetector.getStatus() });
+});
 
 export default router;
