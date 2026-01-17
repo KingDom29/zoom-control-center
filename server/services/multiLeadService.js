@@ -732,7 +732,7 @@ class MultiLeadService {
     const branchConfig = BRANCHES[lead.branch];
     
     await emailService.sendEmail({
-      to: 'de@maklerplan.com',
+      to: 'de@leadquelle.ai',
       subject: `🎯 BOOKING: ${lead.company} hat Termin gebucht!`,
       body: `
 <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
