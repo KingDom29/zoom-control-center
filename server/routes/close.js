@@ -231,6 +231,24 @@ router.get('/pipelines', async (req, res) => {
   }
 });
 
+router.put('/pipelines/:id', async (req, res) => {
+  try {
+    const result = await closeService.updatePipeline(req.params.id, req.body);
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.put('/statuses/opportunity/:id', async (req, res) => {
+  try {
+    const result = await closeService.request('PUT', `/status/opportunity/${req.params.id}/`, req.body);
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // ============================================
 // TWILIO INTEGRATION
 // ============================================
