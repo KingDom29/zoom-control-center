@@ -4,6 +4,7 @@ import { sequenceEngine } from '../services/sequenceEngine.js';
 import { teamActivityService } from '../services/teamActivityService.js';
 import { meetingQualityService } from '../services/meetingQualityService.js';
 import { salesAutomationService } from '../services/salesAutomationService.js';
+import { pipelineService } from '../services/unified/pipelineService.js';
 import logger from '../utils/logger.js';
 
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
@@ -714,6 +715,28 @@ const dealCloserJob = cron.schedule('0 10,15 * * 1-5', async () => {
 }, { timezone: 'Europe/Berlin' });
 logger.info('🎯 Deal-Closer Job: Werktags 10:00 und 15:00 Uhr');
 
+// ============================================
+// UNIFIED CRM PIPELINE
+// ============================================
+
+// Unified Sequenzen verarbeiten - Stündlich
+async function runUnifiedSequences() {
+  logger.info('🚀 Starte Unified Sequenzen...');
+  try {
+    const result = await pipelineService.processSequences();
+    logger.info('✅ Unified Sequenzen abgeschlossen', { processed: result.processed, errors: result.errors });
+    return result;
+  } catch (error) {
+    logger.error('Unified Sequenzen Fehler', { error: error.message });
+    throw error;
+  }
+}
+
+const unifiedSequenceJob = cron.schedule('0 9,10,11,12,13,14,15,16,17 * * 1-5', async () => {
+  await runUnifiedSequences();
+}, { timezone: 'Europe/Berlin' });
+logger.info('🚀 Unified Sequence Job: Werktags stündlich 9-17 Uhr');
+
 // Export für manuelle Ausführung und Status-Check
 export { 
   runCampaignBatch, campaignJob, 
@@ -734,5 +757,6 @@ export {
   runInactivityReminders, inactivityReminderJob,
   runNoShowReschedule, noShowRescheduleJob,
   runWarmUps, warmUpJob,
-  runDealClosers, dealCloserJob
+  runDealClosers, dealCloserJob,
+  runUnifiedSequences, unifiedSequenceJob
 };
