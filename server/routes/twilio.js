@@ -38,6 +38,51 @@ router.get('/permissions/sms', async (req, res) => {
   res.json(permissions);
 });
 
+// Vollständige Phone Config (inkl. Rufumleitungen)
+router.get('/config', async (req, res) => {
+  const config = await twilioService.getPhoneConfig();
+  res.json(config);
+});
+
+// Rufumleitung setzen
+router.post('/forwarding', async (req, res) => {
+  try {
+    const { forwardTo } = req.body;
+    if (!forwardTo) {
+      return res.status(400).json({ error: 'forwardTo required' });
+    }
+    const result = await twilioService.setCallForwarding(forwardTo);
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Rufumleitung entfernen
+router.delete('/forwarding', async (req, res) => {
+  try {
+    const result = await twilioService.removeCallForwarding();
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// TwiML für Weiterleitung
+router.all('/twiml/forward', (req, res) => {
+  const to = req.query.to || req.body.To;
+  
+  res.type('text/xml');
+  res.send(`
+    <?xml version="1.0" encoding="UTF-8"?>
+    <Response>
+      <Dial callerId="${process.env.TWILIO_PHONE_NUMBER}">
+        <Number>${to}</Number>
+      </Dial>
+    </Response>
+  `);
+});
+
 // ============================================
 // SMS
 // ============================================

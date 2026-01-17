@@ -366,6 +366,123 @@ class TwilioService {
       return { error: error.message };
     }
   }
+
+  /**
+   * Vollständige Phone Number Config inkl. Rufumleitungen
+   */
+  async getPhoneConfig() {
+    if (!this.isConfigured() || !TWILIO_PHONE_NUMBER) return null;
+
+    try {
+      const numbers = await this.client.incomingPhoneNumbers.list({ phoneNumber: TWILIO_PHONE_NUMBER });
+      
+      if (numbers.length === 0) return { error: 'Phone number not found' };
+
+      const n = numbers[0];
+      return {
+        sid: n.sid,
+        phoneNumber: n.phoneNumber,
+        friendlyName: n.friendlyName,
+        
+        // Voice/Call Routing
+        voiceUrl: n.voiceUrl,
+        voiceMethod: n.voiceMethod,
+        voiceFallbackUrl: n.voiceFallbackUrl,
+        voiceCallerIdLookup: n.voiceCallerIdLookup,
+        voiceApplicationSid: n.voiceApplicationSid,
+        
+        // SMS Routing
+        smsUrl: n.smsUrl,
+        smsMethod: n.smsMethod,
+        smsFallbackUrl: n.smsFallbackUrl,
+        smsApplicationSid: n.smsApplicationSid,
+        
+        // Status Callbacks
+        statusCallback: n.statusCallback,
+        statusCallbackMethod: n.statusCallbackMethod,
+        
+        // Trunk (SIP)
+        trunkSid: n.trunkSid,
+        
+        // Emergency
+        emergencyStatus: n.emergencyStatus,
+        emergencyAddressSid: n.emergencyAddressSid,
+        
+        // Forwarding Analysis
+        hasVoiceForwarding: !!n.voiceUrl || !!n.voiceApplicationSid || !!n.trunkSid,
+        hasSmsForwarding: !!n.smsUrl || !!n.smsApplicationSid,
+        
+        dateCreated: n.dateCreated,
+        dateUpdated: n.dateUpdated
+      };
+    } catch (error) {
+      logger.error('Phone Config Fehler', { error: error.message });
+      return { error: error.message };
+    }
+  }
+
+  /**
+   * Rufumleitung setzen
+   */
+  async setCallForwarding(forwardTo) {
+    if (!this.isConfigured() || !TWILIO_PHONE_NUMBER) return null;
+
+    try {
+      const numbers = await this.client.incomingPhoneNumbers.list({ phoneNumber: TWILIO_PHONE_NUMBER });
+      if (numbers.length === 0) return { error: 'Phone number not found' };
+
+      const formattedTo = this.formatPhoneNumber(forwardTo);
+      if (!formattedTo) return { error: 'Invalid forward number' };
+
+      // TwiML Bin URL oder direkte Weiterleitung
+      const twimlUrl = `${process.env.PUBLIC_URL}/api/twilio/twiml/forward?to=${encodeURIComponent(formattedTo)}`;
+
+      const updated = await this.client.incomingPhoneNumbers(numbers[0].sid).update({
+        voiceUrl: twimlUrl,
+        voiceMethod: 'POST'
+      });
+
+      logger.info('📞 Rufumleitung gesetzt', { forwardTo: formattedTo });
+
+      return {
+        success: true,
+        phoneNumber: updated.phoneNumber,
+        forwardTo: formattedTo,
+        voiceUrl: updated.voiceUrl
+      };
+    } catch (error) {
+      logger.error('Rufumleitung Fehler', { error: error.message });
+      return { error: error.message };
+    }
+  }
+
+  /**
+   * Rufumleitung entfernen
+   */
+  async removeCallForwarding() {
+    if (!this.isConfigured() || !TWILIO_PHONE_NUMBER) return null;
+
+    try {
+      const numbers = await this.client.incomingPhoneNumbers.list({ phoneNumber: TWILIO_PHONE_NUMBER });
+      if (numbers.length === 0) return { error: 'Phone number not found' };
+
+      const updated = await this.client.incomingPhoneNumbers(numbers[0].sid).update({
+        voiceUrl: '',
+        voiceMethod: 'POST'
+      });
+
+      logger.info('📞 Rufumleitung entfernt');
+
+      return {
+        success: true,
+        phoneNumber: updated.phoneNumber,
+        voiceUrl: updated.voiceUrl
+      };
+    } catch (error) {
+      logger.error('Rufumleitung entfernen Fehler', { error: error.message });
+      return { error: error.message };
+    }
+  }
 }
 
 export const twilioService = new TwilioService();
