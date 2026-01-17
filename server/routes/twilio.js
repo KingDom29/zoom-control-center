@@ -110,14 +110,33 @@ router.get('/calls/active', async (req, res) => {
 // VOICE WEBHOOKS (eingehende Anrufe)
 // ============================================
 
+// Konfiguration
+const NOTIFY_PHONE = '+41764357375'; // SMS-Benachrichtigungen
+const ZENDESK_TALK_NUMBER = '+41445515459'; // Zendesk Talk Nummer (falls vorhanden)
+const DOMINIK_PHONE = '+41764357375'; // Backup Weiterleitung
+
 // Eingehender Anruf - Haupthandler
 router.post('/voice/incoming', async (req, res) => {
-  const { From, To, CallSid, CallStatus } = req.body;
+  const { From, To, CallSid, CallStatus, CallerName } = req.body;
   
   logger.info('📞 Eingehender Anruf', { from: From, to: To, callSid: CallSid });
 
   // Kontakt in DB suchen
   const contact = unifiedContactService.getContactByPhone?.(From);
+  const contactInfo = contact 
+    ? `${contact.firstName} ${contact.lastName} (${contact.email})` 
+    : CallerName || 'Unbekannt';
+
+  // SMS-Benachrichtigung senden
+  try {
+    await twilioService.sendSMS(
+      NOTIFY_PHONE,
+      `📞 Eingehender Anruf!\n\nVon: ${From}\nKontakt: ${contactInfo}\nZeit: ${new Date().toLocaleString('de-DE')}\n\nWird weitergeleitet...`
+    );
+    logger.info('📱 SMS-Benachrichtigung gesendet', { to: NOTIFY_PHONE });
+  } catch (smsError) {
+    logger.error('SMS-Benachrichtigung fehlgeschlagen', { error: smsError.message });
+  }
   
   if (contact) {
     // Bekannter Kontakt - Interaction loggen
@@ -129,19 +148,14 @@ router.post('/voice/incoming', async (req, res) => {
     });
   }
 
-  // TwiML Response - Optionen:
-  // 1. Direkt weiterleiten an Team
-  // 2. IVR Menü
-  // 3. Voicemail
-  
+  // TwiML Response - Simultanes Klingeln (Zendesk Talk + Dominik)
   res.type('text/xml');
   res.send(`
     <?xml version="1.0" encoding="UTF-8"?>
     <Response>
       <Say language="de-DE">Willkommen bei Maklerplan. Bitte warten Sie, wir verbinden Sie.</Say>
-      <Dial timeout="30" callerId="${process.env.TWILIO_PHONE_NUMBER}" record="record-from-answer">
-        <!-- Hier Team-Nummern eintragen -->
-        <Number>+41791234567</Number>
+      <Dial timeout="30" callerId="${From}" record="record-from-answer">
+        <Number>${DOMINIK_PHONE}</Number>
       </Dial>
       <Say language="de-DE">Es konnte leider niemand erreicht werden. Bitte hinterlassen Sie eine Nachricht nach dem Signalton.</Say>
       <Record maxLength="120" transcribe="true" transcribeCallback="/api/twilio/voice/transcription" />
@@ -165,10 +179,26 @@ router.post('/voice/fallback', (req, res) => {
 });
 
 // Call Status Updates
-router.post('/voice/status', (req, res) => {
+router.post('/voice/status', async (req, res) => {
   const { CallSid, CallStatus, CallDuration, From, To } = req.body;
   
   logger.info('📞 Call Status', { callSid: CallSid, status: CallStatus, duration: CallDuration });
+
+  // SMS bei wichtigen Status-Änderungen
+  const statusMessages = {
+    'completed': `✅ Anruf beendet\nVon: ${From}\nDauer: ${CallDuration}s`,
+    'no-answer': `❌ Anruf verpasst!\nVon: ${From}\nNicht angenommen`,
+    'busy': `📵 Besetzt\nVon: ${From}\nLeitung war besetzt`,
+    'failed': `⚠️ Anruf fehlgeschlagen\nVon: ${From}`
+  };
+
+  if (statusMessages[CallStatus]) {
+    try {
+      await twilioService.sendSMS(NOTIFY_PHONE, statusMessages[CallStatus]);
+    } catch (e) {
+      logger.error('Status SMS fehlgeschlagen', { error: e.message });
+    }
+  }
 
   // Bei Anrufende: Contact updaten
   if (CallStatus === 'completed' && CallDuration) {
@@ -186,16 +216,25 @@ router.post('/voice/status', (req, res) => {
 });
 
 // Voicemail Transcription
-router.post('/voice/transcription', (req, res) => {
+router.post('/voice/transcription', async (req, res) => {
   const { TranscriptionText, RecordingUrl, From, CallSid } = req.body;
   
   logger.info('📝 Voicemail Transcription', { from: From, text: TranscriptionText });
 
-  // Zendesk Ticket für Voicemail erstellen
+  // SMS-Benachrichtigung über Voicemail
   if (TranscriptionText) {
     const contact = unifiedContactService.getContactByPhone?.(From);
+    const contactInfo = contact ? `${contact.firstName} ${contact.lastName}` : 'Unbekannt';
     
-    // TODO: Zendesk Ticket erstellen
+    try {
+      await twilioService.sendSMS(
+        NOTIFY_PHONE,
+        `🎤 Neue Voicemail!\n\nVon: ${From}\nKontakt: ${contactInfo}\n\nTranskription:\n"${TranscriptionText.substring(0, 140)}..."\n\n🔊 ${RecordingUrl}`
+      );
+    } catch (e) {
+      logger.error('Voicemail SMS fehlgeschlagen', { error: e.message });
+    }
+    
     logger.info('📝 Voicemail von', { 
       from: From, 
       contact: contact?.email,
@@ -482,7 +521,7 @@ router.post('/sms-status', (req, res) => {
 });
 
 // Incoming SMS Webhook
-router.post('/incoming-sms', (req, res) => {
+router.post('/incoming-sms', async (req, res) => {
   const { From, Body, MessageSid } = req.body;
   
   logger.info('📨 Incoming SMS', {
@@ -491,8 +530,20 @@ router.post('/incoming-sms', (req, res) => {
     messageSid: MessageSid
   });
 
-  // Kontakt finden und Interaction loggen
+  // Kontakt finden
   const contact = unifiedContactService.getContactByPhone?.(From);
+  const contactInfo = contact ? `${contact.firstName} ${contact.lastName}` : 'Unbekannt';
+
+  // SMS-Benachrichtigung weiterleiten
+  try {
+    await twilioService.sendSMS(
+      NOTIFY_PHONE,
+      `📨 Neue SMS!\n\nVon: ${From}\nKontakt: ${contactInfo}\n\nNachricht:\n"${Body}"`
+    );
+  } catch (e) {
+    logger.error('SMS-Weiterleitung fehlgeschlagen', { error: e.message });
+  }
+
   if (contact) {
     unifiedContactService.addInteraction(contact.id, {
       type: 'sms_received',
@@ -502,7 +553,7 @@ router.post('/incoming-sms', (req, res) => {
     });
   }
 
-  // Auto-Reply (optional)
+  // Auto-Reply
   res.type('text/xml');
   res.send(`
     <?xml version="1.0" encoding="UTF-8"?>
