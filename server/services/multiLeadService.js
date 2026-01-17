@@ -716,10 +716,58 @@ class MultiLeadService {
       data.byBranch[lead.branch].booked++;
       
       logger.info(`🎯 BOOKING: ${lead.company} (${lead.branch})`);
+      
+      // Notification E-Mail senden
+      this.sendBookingNotification(lead).catch(e => 
+        logger.error('Booking Notification Fehler', { error: e.message })
+      );
     }
 
     fs.writeFileSync(MULTI_LEADS_PATH, JSON.stringify(data, null, 2));
     return { action: tokenInfo.action, lead };
+  }
+
+  // Booking Notification an Admin senden
+  async sendBookingNotification(lead) {
+    const branchConfig = BRANCHES[lead.branch];
+    
+    await emailService.sendEmail({
+      to: 'de@maklerplan.com',
+      subject: `🎯 BOOKING: ${lead.company} hat Termin gebucht!`,
+      body: `
+<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+  <div style="background: #22c55e; color: white; padding: 20px; border-radius: 8px; text-align: center;">
+    <h1 style="margin: 0;">🎯 Neuer Termin gebucht!</h1>
+  </div>
+  
+  <div style="padding: 20px; background: #f9fafb; margin-top: 20px; border-radius: 8px;">
+    <h2 style="margin-top: 0;">${branchConfig?.emoji || '📊'} ${lead.company}</h2>
+    
+    <table style="width: 100%; border-collapse: collapse;">
+      <tr><td style="padding: 8px 0; border-bottom: 1px solid #eee;"><strong>Branche:</strong></td><td style="padding: 8px 0; border-bottom: 1px solid #eee;">${branchConfig?.name || lead.branch}</td></tr>
+      <tr><td style="padding: 8px 0; border-bottom: 1px solid #eee;"><strong>E-Mail:</strong></td><td style="padding: 8px 0; border-bottom: 1px solid #eee;"><a href="mailto:${lead.email}">${lead.email}</a></td></tr>
+      <tr><td style="padding: 8px 0; border-bottom: 1px solid #eee;"><strong>Telefon:</strong></td><td style="padding: 8px 0; border-bottom: 1px solid #eee;">${lead.phone || '-'}</td></tr>
+      <tr><td style="padding: 8px 0; border-bottom: 1px solid #eee;"><strong>Website:</strong></td><td style="padding: 8px 0; border-bottom: 1px solid #eee;"><a href="${lead.website}">${lead.website}</a></td></tr>
+      <tr><td style="padding: 8px 0; border-bottom: 1px solid #eee;"><strong>Adresse:</strong></td><td style="padding: 8px 0; border-bottom: 1px solid #eee;">${lead.address}</td></tr>
+      <tr><td style="padding: 8px 0; border-bottom: 1px solid #eee;"><strong>Rating:</strong></td><td style="padding: 8px 0; border-bottom: 1px solid #eee;">⭐ ${lead.rating} (${lead.reviewCount} Bewertungen)</td></tr>
+      <tr><td style="padding: 8px 0;"><strong>Gebucht am:</strong></td><td style="padding: 8px 0;">${new Date().toLocaleString('de-DE')}</td></tr>
+    </table>
+  </div>
+  
+  <div style="text-align: center; margin-top: 20px;">
+    <a href="https://us06web.zoom.us/j/87543991929" style="background: #2563eb; color: white; padding: 15px 30px; text-decoration: none; border-radius: 8px; font-weight: bold; display: inline-block;">
+      🎥 Zum Zoom Meeting
+    </a>
+  </div>
+  
+  <p style="color: #666; font-size: 12px; margin-top: 30px; text-align: center;">
+    Leadquelle AI - Automatische Booking-Benachrichtigung
+  </p>
+</div>
+      `
+    });
+    
+    logger.info(`📧 Booking Notification gesendet für ${lead.company}`);
   }
 
   // Opt-Out
