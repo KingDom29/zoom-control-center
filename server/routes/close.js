@@ -237,4 +237,36 @@ router.post('/log-twilio-sms', async (req, res) => {
   }
 });
 
+// ============================================
+// ADMIN / RESET
+// ============================================
+
+router.delete('/leads/:id', async (req, res) => {
+  try {
+    await closeService.deleteLead(req.params.id);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/reset-all', async (req, res) => {
+  try {
+    const { confirm } = req.body;
+    if (confirm !== 'DELETE_ALL_LEADS') {
+      return res.status(400).json({ error: 'Bestätigung erforderlich: confirm = "DELETE_ALL_LEADS"' });
+    }
+    
+    res.json({ message: 'Löschung gestartet... Dies kann einige Minuten dauern.' });
+    
+    // Async ausführen
+    closeService.deleteAllLeads().then(result => {
+      logger.info('Close Reset abgeschlossen', result);
+    });
+    
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 export default router;

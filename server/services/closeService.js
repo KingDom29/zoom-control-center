@@ -302,6 +302,44 @@ class CloseService {
     return results;
   }
 
+  async deleteLead(leadId) {
+    return this.request('DELETE', `/lead/${leadId}/`);
+  }
+
+  async deleteAllLeads() {
+    let deleted = 0;
+    let errors = 0;
+    let hasMore = true;
+
+    while (hasMore) {
+      const leads = await this.getLeads({ limit: 100 });
+      
+      if (!leads?.data || leads.data.length === 0) {
+        hasMore = false;
+        break;
+      }
+
+      for (const lead of leads.data) {
+        try {
+          await this.deleteLead(lead.id);
+          deleted++;
+          if (deleted % 50 === 0) {
+            logger.info(`Close: ${deleted} Leads gelöscht...`);
+          }
+        } catch (error) {
+          errors++;
+          logger.error('Delete Lead Fehler', { leadId: lead.id, error: error.message });
+        }
+      }
+
+      // Rate Limiting - kurze Pause
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
+
+    logger.info(`Close komplett geleert: ${deleted} gelöscht, ${errors} Fehler`);
+    return { deleted, errors };
+  }
+
   // ============================================
   // SYNC MIT TWILIO
   // ============================================
